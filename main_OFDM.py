@@ -18,7 +18,7 @@ num_frames = 1000
 
 num_subcarriers = 64
 num_ofdm_symbols = 14
-num_pilot_symbols = 1
+num_pilot_symbols = 2
 num_data_ofdm_symbols = num_ofdm_symbols - num_pilot_symbols
 
 bits_per_qam_symbol = 4
@@ -69,7 +69,7 @@ rg = ResourceGrid(
     cyclic_prefix_length=cp_len,
     dc_null=False,
     pilot_pattern="kronecker",
-    pilot_ofdm_symbol_indices=[0],
+    pilot_ofdm_symbol_indices=[2, 11],
     precision="single",
     device=device,
 )
