@@ -7,6 +7,8 @@ from sionna.phy.utils import count_errors
 from sionna.phy.ofdm import ResourceGrid, ResourceGridMapper, OFDMModulator, OFDMDemodulator, LSChannelEstimator
 from sionna.phy.mimo import StreamManagement
 from sionna.phy.ofdm import LMMSEEqualizer
+from sionna.phy.fec.ldpc.encoding import LDPC5GEncoder
+from sionna.phy.fec.ldpc.decoding import LDPC5GDecoder
 
 from theo_upper_bound import calculate_upper_bound, plot_theory_vs_simulation
 
@@ -14,10 +16,10 @@ from theo_upper_bound import calculate_upper_bound, plot_theory_vs_simulation
 config.seed = 0
 device = config.device
 
-num_frames = 100000
+num_frames = 1000
 
-num_subcarriers = 8
-num_ofdm_symbols = 4
+num_subcarriers = 64
+num_ofdm_symbols = 14
 num_pilot_symbols = 1
 num_data_ofdm_symbols = num_ofdm_symbols - num_pilot_symbols
 
@@ -25,9 +27,11 @@ bits_per_qam_symbol = 4
 
 repetition_factor = 3
 
+code_rate = 1/2
+
 num_coded_bits_per_frame = num_data_ofdm_symbols * num_subcarriers * bits_per_qam_symbol
 
-num_info_bits_per_frame = num_coded_bits_per_frame // repetition_factor
+num_info_bits_per_frame = int(num_coded_bits_per_frame * code_rate)
 
 num_info_bits = num_frames * num_info_bits_per_frame
 num_coded_bits = num_frames * num_coded_bits_per_frame
@@ -59,18 +63,6 @@ demapper = Demapper(
 awgn = AWGN(precision="single", device=device)
 
 info_bits = source([num_frames, num_info_bits_per_frame]).to(torch.long)
-
-coded_bits_flat = info_bits.repeat_interleave(
-    repetition_factor,
-    dim=1,
-)
-
-coded_bits = coded_bits_flat.reshape(
-    num_frames,
-    num_data_ofdm_symbols,
-    num_subcarriers,
-    bits_per_qam_symbol,
-)
 
 rg = ResourceGrid(
     num_ofdm_symbols=num_ofdm_symbols,
@@ -147,6 +139,36 @@ sionna_time_channel = TimeChannel(
     precision="single",
     device=device,
 )
+
+ldpc_encoder = LDPC5GEncoder(
+    k=num_info_bits_per_frame,
+    n=num_coded_bits_per_frame,
+    num_bits_per_symbol=bits_per_qam_symbol,
+    precision="single",
+    device=device,
+)
+
+ldpc_decoder = LDPC5GDecoder(
+    ldpc_encoder,
+    hard_out=True,
+    return_infobits=True,
+    num_iter=20,
+    precision="single",
+    device=device,
+)
+
+coded_bits_flat = ldpc_encoder(info_bits)
+
+coded_bits = coded_bits_flat.reshape(
+    num_frames,
+    num_data_ofdm_symbols,
+    num_subcarriers,
+    bits_per_qam_symbol,
+)
+
+print("LDPC encoder k:", ldpc_encoder.k)
+print("LDPC encoder n:", ldpc_encoder.n)
+raise SystemExit
 
 x_freq = mapper(coded_bits).squeeze(-1)
 
