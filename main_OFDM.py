@@ -9,9 +9,7 @@ from sionna.phy.mimo import StreamManagement
 from sionna.phy.ofdm import LMMSEEqualizer
 from sionna.phy.fec.ldpc.encoding import LDPC5GEncoder
 from sionna.phy.fec.ldpc.decoding import LDPC5GDecoder
-
-from theo_upper_bound import calculate_upper_bound, plot_theory_vs_simulation
-
+from sionna.phy.channel.tr38901 import TDL
 
 config.seed = 0
 device = config.device
@@ -25,8 +23,6 @@ num_data_ofdm_symbols = num_ofdm_symbols - num_pilot_symbols
 
 bits_per_qam_symbol = 4
 
-repetition_factor = 3
-
 code_rate = 1/2
 
 num_coded_bits_per_frame = num_data_ofdm_symbols * num_subcarriers * bits_per_qam_symbol
@@ -36,7 +32,7 @@ num_info_bits_per_frame = int(num_coded_bits_per_frame * code_rate)
 num_info_bits = num_frames * num_info_bits_per_frame
 num_coded_bits = num_frames * num_coded_bits_per_frame
 
-cp_len = 2
+cp_len = 8
 
 snr_dbs = [0, 4, 8, 12, 16, 20, 24, 28]
 
@@ -166,10 +162,6 @@ coded_bits = coded_bits_flat.reshape(
     bits_per_qam_symbol,
 )
 
-print("LDPC encoder k:", ldpc_encoder.k)
-print("LDPC encoder n:", ldpc_encoder.n)
-raise SystemExit
-
 x_freq = mapper(coded_bits).squeeze(-1)
 
 x_freq_sionna_input = x_freq.reshape(num_frames, 1, 1, rg.num_data_symbols)
@@ -220,15 +212,7 @@ for snr_db_target in snr_dbs:
         num_coded_bits_per_frame,
     )
 
-    llr_groups = llr_flat.reshape(
-        num_frames,
-        num_info_bits_per_frame,
-        repetition_factor,
-    )
-
-    info_llr = torch.sum(llr_groups, dim=2)
-
-    decoded_info_bits = (info_llr > 0).to(torch.long)
+    decoded_info_bits = ldpc_decoder(llr_flat).to(torch.long)
 
     errors = decoded_info_bits != info_bits
 
@@ -244,18 +228,3 @@ for snr_db_target in snr_dbs:
     print("BER estimated channel:", ber.item())
     print("FER:", fer.item())
     print()
-
-'''
-theory_ber = calculate_upper_bound(
-    snr_dbs,
-    bits_per_qam_symbol=bits_per_qam_symbol,
-    repetition_factor=repetition_factor,
-)
-
-plot_theory_vs_simulation(
-    snr_dbs,
-    ber_results,
-    save_path="ofdm_ber_plot.png",
-    data_save_path="ofdm_ber_results.csv",
-)
-'''
