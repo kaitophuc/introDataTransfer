@@ -1558,3 +1558,367 @@ understand the communication system first
 -> replace selected receiver pieces with ML
 -> optimize performance later
 ```
+
+
+## 40. Repetition Coding And Soft Decoding
+
+We first added a simple repetition code to understand channel coding.
+
+The uncoded frame carried:
+
+```text
+96 useful bits per frame
+```
+
+With repetition-3 coding, the frame still transmitted 96 coded bits, but only carried:
+
+```text
+32 useful information bits per frame
+```
+
+The code rate was:
+
+```text
+R = information bits / coded bits = 32 / 96 = 1/3
+```
+
+Hard repetition decoding used majority vote:
+
+```text
+decoded repeated bits: 1, 0, 1
+majority -> 1
+```
+
+Soft repetition decoding used LLRs:
+
+```text
+LLRs: +0.5, +0.4, -3.0
+sum = -2.1
+decision -> 0
+```
+
+This showed an important receiver idea:
+
+```text
+hard decisions throw away confidence
+soft decisions keep confidence
+```
+
+Soft decoding performed better because the receiver used how confident each repeated copy was, not just whether each copy looked like `0` or `1`.
+
+## 41. LDPC Channel Coding
+
+We then replaced the toy repetition code with a real Sionna LDPC code.
+
+LDPC means:
+
+```text
+Low-Density Parity-Check code
+```
+
+It protects information bits by adding structured redundancy through many sparse parity-check rules.
+
+The LDPC chain is:
+
+```text
+info_bits
+-> LDPC5GEncoder
+-> coded_bits
+-> QAM mapper
+-> OFDM transmitter
+-> channel
+-> OFDM receiver
+-> demapper LLRs
+-> LDPC5GDecoder
+-> decoded_info_bits
+```
+
+For the LDPC-sized setup, we used:
+
+```text
+num_frames = 1000
+num_subcarriers = 64
+num_ofdm_symbols = 14
+bits_per_qam_symbol = 4
+code_rate = 1/2
+```
+
+With one pilot OFDM symbol and 13 data OFDM symbols:
+
+```text
+13 data OFDM symbols * 64 subcarriers * 4 bits = 3328 coded bits/frame
+3328 * 1/2 = 1664 information bits/frame
+```
+
+Important shapes:
+
+```text
+info_bits:          [1000, 1664]
+coded_bits_flat:    [1000, 3328]
+coded_bits:         [1000, 13, 64, 4]
+x_freq:             [1000, 13, 64]
+x_grid_sionna:      [1000, 1, 1, 14, 64]
+x_time_sionna:      [1000, 1, 1, 924]     with CP length 2
+llr_flat:           [1000, 3328]
+decoded_info_bits:  [1000, 1664]
+```
+
+The LDPC decoder consumes LLRs directly:
+
+```text
+demapper LLRs
+-> LDPC decoder belief updates
+-> final decoded bits
+```
+
+That means LDPC is a soft-input decoder. It uses confidence values, not only hard `0/1` decisions.
+
+## 42. TDL Multipath Channel
+
+We replaced flat Rayleigh fading with a TDL channel:
+
+```python
+channel_model = TDL(
+    model="A",
+    delay_spread=300e-9,
+    carrier_frequency=3.5e9,
+    min_speed=0.0,
+    max_speed=0.0,
+    num_rx_ant=1,
+    num_tx_ant=1,
+    precision="single",
+    device=device,
+)
+```
+
+TDL means:
+
+```text
+Tapped Delay Line
+```
+
+It models multiple delayed copies of the transmitted signal:
+
+```text
+y[t] = h0*x[t] + h1*x[t-1] + h2*x[t-2] + ... + noise
+```
+
+For our TDL-A setup, Sionna used 16 time-domain channel taps.
+
+That changed the channel from:
+
+```text
+flat fading:
+one channel value for all subcarriers
+```
+
+to:
+
+```text
+frequency-selective fading:
+different subcarriers can see different channel gains
+```
+
+Because the channel had 16 taps, we increased cyclic prefix length:
+
+```text
+cp_len = 16
+```
+
+With 14 OFDM symbols, 64 subcarriers, and CP length 16:
+
+```text
+x_time length = 14 * (64 + 16) = 1120
+```
+
+The channel output length became:
+
+```text
+y_time length = 1120 + (16 - 1) = 1135
+```
+
+So the observed shapes were:
+
+```text
+x_time_sionna: [1000, 1, 1, 1120]
+y_time_clean:  [1000, 1, 1, 1135]
+h_time_sionna: [1000, 1, 1, 1, 1, 1135, 16]
+```
+
+The last dimension of `h_time_sionna` is the number of channel taps.
+
+## 43. Channel Timing And `l_min`
+
+For the TDL channel, Sionna used channel tap indices:
+
+```text
+l_min = -6
+l_max = 9
+```
+
+That gives:
+
+```text
+9 - (-6) + 1 = 16 taps
+```
+
+`l_min` is the earliest channel tap index. It is a timing reference used by the OFDM demodulator for phase compensation.
+
+So the demodulator should use the same timing reference as the channel:
+
+```python
+OFDMDemodulator(
+    fft_size=num_subcarriers,
+    l_min=sionna_time_channel.l_min,
+    cyclic_prefix_length=cp_len,
+    precision="single",
+    device=device,
+)
+```
+
+The practical meaning is:
+
+```text
+channel and receiver must agree on where the OFDM symbol timing starts
+```
+
+## 44. Mobility And Doppler
+
+We then made the TDL channel time-varying by setting:
+
+```python
+min_speed=10.0
+max_speed=10.0
+```
+
+This means:
+
+```text
+10 m/s, about 22 mph
+```
+
+Now the channel is:
+
+```text
+multipath
+frequency-selective
+time-varying
+```
+
+With nearest-neighbor interpolation:
+
+```python
+interpolation_type="nn"
+```
+
+the BER stopped improving at high SNR. This is an error floor.
+
+The cause was no longer mainly noise. The cause was channel-estimation and interpolation error:
+
+```text
+the channel changes over time
+nearest-neighbor copying is too crude
+```
+
+Changing the estimator to linear interpolation:
+
+```python
+interpolation_type="lin"
+```
+
+fixed the error floor in our run.
+
+Important clarification:
+
+```text
+"nn" in Sionna interpolation means nearest neighbor
+not neural network
+```
+
+## 45. Pilot Pattern Tradeoff
+
+A pilot is a known signal sent so the receiver can estimate the channel.
+
+The receiver knows:
+
+```text
+pilot_x = transmitted pilot
+pilot_y = received pilot
+```
+
+Then it estimates:
+
+```text
+h_hat = pilot_y / pilot_x
+```
+
+With 14 OFDM symbols and 64 subcarriers, one full pilot OFDM symbol means:
+
+```text
+64 pilot resource elements
+```
+
+Two pilot OFDM symbols means:
+
+```text
+128 pilot resource elements
+```
+
+Three pilot OFDM symbols means:
+
+```text
+192 pilot resource elements
+```
+
+We compared pilot layouts under mobility:
+
+```text
+2 pilots: [2, 11]
+3 pilots: [0, 7, 13]
+```
+
+The 3-pilot layout improved reliability:
+
+```text
+at 8 dB:
+2 pilots BER ~ 0.1349
+3 pilots BER ~ 0.1006
+
+at 12 dB:
+2 pilots BER ~ 0.000584
+3 pilots BER ~ 0.000175
+```
+
+But it reduced data capacity:
+
+```text
+2 pilots -> 12 data OFDM symbols/frame
+3 pilots -> 11 data OFDM symbols/frame
+```
+
+This is a core wireless tradeoff:
+
+```text
+more pilots
+-> better channel estimation
+-> better BER/FER
+-> fewer resources for data
+```
+
+Current strong classical baseline:
+
+```text
+LDPC rate 1/2
+16-QAM
+64 subcarriers
+14 OFDM symbols
+TDL-A multipath channel
+10 m/s mobility
+CP length 16
+3 full pilot OFDM symbols at [0, 7, 13]
+LS channel estimation
+linear interpolation
+LMMSE equalization
+soft demapping
+LDPC decoding
+```

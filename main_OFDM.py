@@ -18,7 +18,7 @@ num_frames = 1000
 
 num_subcarriers = 64
 num_ofdm_symbols = 14
-num_pilot_symbols = 2
+num_pilot_symbols = 3
 num_data_ofdm_symbols = num_ofdm_symbols - num_pilot_symbols
 
 bits_per_qam_symbol = 4
@@ -69,7 +69,7 @@ rg = ResourceGrid(
     cyclic_prefix_length=cp_len,
     dc_null=False,
     pilot_pattern="kronecker",
-    pilot_ofdm_symbol_indices=[2, 11],
+    pilot_ofdm_symbol_indices=[0, 7, 13],
     precision="single",
     device=device,
 )
@@ -82,7 +82,7 @@ rg_mapper = ResourceGridMapper(
 
 ls_estimator = LSChannelEstimator(
     rg,
-    interpolation_type="nn",
+    interpolation_type="lin",
     precision="single",
     device=device,
 )
@@ -105,8 +105,8 @@ channel_model = TDL(
     model="A",
     delay_spread=300e-9,
     carrier_frequency=3.5e9,
-    min_speed=0.0,
-    max_speed=0.0,
+    min_speed=10.0,
+    max_speed=10.0,
     num_rx_ant=1,
     num_tx_ant=1,
     precision="single",
