@@ -32,7 +32,7 @@ num_info_bits_per_frame = int(num_coded_bits_per_frame * code_rate)
 num_info_bits = num_frames * num_info_bits_per_frame
 num_coded_bits = num_frames * num_coded_bits_per_frame
 
-cp_len = 8
+cp_len = 16
 
 snr_dbs = [0, 4, 8, 12, 16, 20, 24, 28]
 
@@ -80,20 +80,6 @@ rg_mapper = ResourceGridMapper(
     device=device,
 )
 
-ofdm_modulator = OFDMModulator(
-    cyclic_prefix_length=cp_len,
-    precision="single",
-    device=device,
-)
-
-ofdm_demodulator = OFDMDemodulator(
-    fft_size=num_subcarriers,
-    l_min=0,
-    cyclic_prefix_length=cp_len,
-    precision="single",
-    device=device,
-)
-
 ls_estimator = LSChannelEstimator(
     rg,
     interpolation_type="nn",
@@ -115,10 +101,13 @@ lmmse_equalizer = LMMSEEqualizer(
     device=device,
 )
 
-channel_model = RayleighBlockFading(
-    num_rx=1,
+channel_model = TDL(
+    model="A",
+    delay_spread=300e-9,
+    carrier_frequency=3.5e9,
+    min_speed=0.0,
+    max_speed=0.0,
     num_rx_ant=1,
-    num_tx=1,
     num_tx_ant=1,
     precision="single",
     device=device,
@@ -128,10 +117,22 @@ sionna_time_channel = TimeChannel(
     channel_model=channel_model,
     bandwidth=15e3 * num_subcarriers,
     num_time_samples=num_ofdm_symbols * (num_subcarriers + cp_len),
-    l_min=0,
-    l_max=0,
     normalize_channel=True,
     return_channel=False,
+    precision="single",
+    device=device,
+)
+
+ofdm_modulator = OFDMModulator(
+    cyclic_prefix_length=cp_len,
+    precision="single",
+    device=device,
+)
+
+ofdm_demodulator = OFDMDemodulator(
+    fft_size=num_subcarriers,
+    l_min=sionna_time_channel.l_min,
+    cyclic_prefix_length=cp_len,
     precision="single",
     device=device,
 )
