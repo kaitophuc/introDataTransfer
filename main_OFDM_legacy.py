@@ -18,7 +18,6 @@ from sionna.phy.ofdm import (
     ResourceGrid,
     ResourceGridMapper,
 )
-from neural_receiver import NeuralDemapper
 
 config.seed = 0
 
@@ -116,28 +115,28 @@ def run_one_batch(
         rg.num_data_symbols,
     )
 
-    neural_features = torch.stack(
-        [
-            torch.real(equalized_data_freq),
-            torch.imag(equalized_data_freq),
-            torch.log(no_eff.reshape(batch_frames, rg.num_data_symbols)),
-        ],
-        dim=-1,
+    llr = demapper(
+        equalized_data_freq.unsqueeze(-1),
+        no_eff.reshape(batch_frames, rg.num_data_symbols).unsqueeze(-1)
     )
 
-    neural_labels = coded_bits.float()
-
-    features_flat = neural_features.reshape(
-        batch_frames * rg.num_data_symbols,
-        3,
+    llr_flat = llr.reshape(
+        batch_frames,
+        num_coded_bits_per_frame,
     )
 
-    labels_flat = neural_labels.reshape(
-        batch_frames * rg.num_data_symbols,
-        bits_per_qam_symbol,
-    )
+    decoded_info_bits = ldpc_decoder(llr_flat).to(torch.long)
 
-    return features_flat, labels_flat
+    errors = decoded_info_bits != info_bits
+
+    bit_errors = count_errors(info_bits, decoded_info_bits)
+    frame_errors = torch.any(errors, dim=1)
+
+    return (
+        int(bit_errors.item()),
+        int(frame_errors.sum().item()),
+        batch_frames * num_info_bits_per_frame,
+    )
 
 def run_one_snr(
     snr_db_target,
@@ -387,36 +386,37 @@ def run_snr_sweep(
 ):
     ber_results = []
 
-    for snr_db_target in snr_dbs:
-        ber, fer = run_one_snr(
-            snr_db_target,
-            total_frames,
-            batch_size,
-            device,
-            source,
-            ldpc_encoder,
-            mapper,
-            rg,
-            rg_mapper,
-            ofdm_modulator,
-            sionna_time_channel,
-            awgn,
-            ofdm_demodulator,
-            ls_estimator,
-            lmmse_equalizer,
-            demapper,
-            ldpc_decoder,
-            num_info_bits_per_frame,
-            num_coded_bits_per_frame,
-            bits_per_qam_symbol,
-        )
+    with torch.no_grad():
+        for snr_db_target in snr_dbs:
+            ber, fer = run_one_snr(
+                snr_db_target,
+                total_frames,
+                batch_size,
+                device,
+                source,
+                ldpc_encoder,
+                mapper,
+                rg,
+                rg_mapper,
+                ofdm_modulator,
+                sionna_time_channel,
+                awgn,
+                ofdm_demodulator,
+                ls_estimator,
+                lmmse_equalizer,
+                demapper,
+                ldpc_decoder,
+                num_info_bits_per_frame,
+                num_coded_bits_per_frame,
+                bits_per_qam_symbol,
+            )
 
-        ber_results.append(ber)
+            ber_results.append(ber)
 
-        print("target SNR dB:", snr_db_target)
-        print("BER estimated channel:", ber)
-        print("FER:", fer)
-        print()
+            print("target SNR dB:", snr_db_target)
+            print("BER estimated channel:", ber)
+            print("FER:", fer)
+            print()
 
     return ber_results
 
@@ -470,70 +470,6 @@ def main():
     num_info_bits_per_frame = system["num_info_bits_per_frame"]
     
     total_frames = math.ceil(target_coded_bits / num_coded_bits_per_frame)
-
-    neural_demapper = NeuralDemapper().to(device)
-
-    loss_function = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(neural_demapper.parameters(), lr=1e-3)
-
-    snr_db_target = 12
-    snr_linear_target = 10 ** (snr_db_target / 10)
-    noise_power_target = 1 / snr_linear_target
-
-    noise_power_target_tensor = torch.tensor(
-        noise_power_target,
-        dtype=torch.float32,
-        device=device,
-    )
-
-    num_training_steps = 200
-
-    for training_step in range(num_training_steps):
-        features_flat, labels_flat = run_one_batch(
-            batch_size,
-            noise_power_target_tensor,
-            source,
-            ldpc_encoder,
-            mapper,
-            rg,
-            rg_mapper,
-            ofdm_modulator,
-            sionna_time_channel,
-            awgn,
-            ofdm_demodulator,
-            ls_estimator,
-            lmmse_equalizer,
-            demapper,
-            ldpc_decoder,
-            num_info_bits_per_frame,
-            num_coded_bits_per_frame,
-            bits_per_qam_symbol,
-        )
-
-        predicted_llr_flat = neural_demapper(features_flat)
-
-        loss = loss_function(
-            predicted_llr_flat,
-            labels_flat,
-        )
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        if training_step % 20 == 0:
-            print("training step:", training_step, "loss:", loss.item())
-
-    with torch.no_grad():
-        predicted_bits = (predicted_llr_flat > 0).to(torch.float32)
-
-        bit_accuracy = torch.mean(
-            (predicted_bits == labels_flat).to(torch.float32)
-        )
-
-    print("neural coded-bit accuracy:", bit_accuracy.item())
-
-    raise SystemExit
 
     ber_results = run_snr_sweep(
         snr_dbs,
