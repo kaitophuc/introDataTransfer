@@ -10,6 +10,7 @@ from sionna.phy.ofdm import LMMSEEqualizer
 from sionna.phy.fec.ldpc.encoding import LDPC5GEncoder
 from sionna.phy.fec.ldpc.decoding import LDPC5GDecoder
 from sionna.phy.channel.tr38901 import TDL
+from sionna.phy.ofdm import PilotPattern
 
 config.seed = 0
 device = config.device
@@ -19,18 +20,10 @@ num_frames = 1000
 num_subcarriers = 64
 num_ofdm_symbols = 14
 num_pilot_symbols = 3
-num_data_ofdm_symbols = num_ofdm_symbols - num_pilot_symbols
 
 bits_per_qam_symbol = 4
 
 code_rate = 1/2
-
-num_coded_bits_per_frame = num_data_ofdm_symbols * num_subcarriers * bits_per_qam_symbol
-
-num_info_bits_per_frame = int(num_coded_bits_per_frame * code_rate)
-
-num_info_bits = num_frames * num_info_bits_per_frame
-num_coded_bits = num_frames * num_coded_bits_per_frame
 
 cp_len = 16
 
@@ -58,7 +51,29 @@ demapper = Demapper(
 
 awgn = AWGN(precision="single", device=device)
 
-info_bits = source([num_frames, num_info_bits_per_frame]).to(torch.long)
+pilot_mask = torch.zeros(
+    (1, 1, num_ofdm_symbols, num_subcarriers),
+    dtype=torch.bool,
+    device=device,
+)
+
+pilot_mask[:, :, 0::4, 0::4] = True
+pilot_mask[:, :, 2::4, 2::4] = True
+
+num_pilot_res = int(torch.sum(pilot_mask).item())
+
+pilot_symbols = torch.ones(
+    (1, 1, num_pilot_res),
+    dtype=torch.complex64,
+    device=device,
+)
+
+pilot_pattern = PilotPattern(
+    pilot_mask,
+    pilot_symbols,
+    precision="single",
+    device=device,
+)
 
 rg = ResourceGrid(
     num_ofdm_symbols=num_ofdm_symbols,
@@ -68,11 +83,24 @@ rg = ResourceGrid(
     num_streams_per_tx=1,
     cyclic_prefix_length=cp_len,
     dc_null=False,
-    pilot_pattern="kronecker",
+    pilot_pattern=pilot_pattern,
     pilot_ofdm_symbol_indices=[0, 7, 13],
     precision="single",
     device=device,
 )
+
+num_data_qam_symbols_per_frame = rg.num_data_symbols
+
+num_coded_bits_per_frame = (
+    num_data_qam_symbols_per_frame * bits_per_qam_symbol
+)
+
+num_info_bits_per_frame = int(num_coded_bits_per_frame * code_rate)
+
+num_info_bits = num_frames * num_info_bits_per_frame
+num_coded_bits = num_frames * num_coded_bits_per_frame
+
+info_bits = source([num_frames, num_info_bits_per_frame]).to(torch.long)
 
 rg_mapper = ResourceGridMapper(
     rg,
@@ -158,8 +186,7 @@ coded_bits_flat = ldpc_encoder(info_bits)
 
 coded_bits = coded_bits_flat.reshape(
     num_frames,
-    num_data_ofdm_symbols,
-    num_subcarriers,
+    rg.num_data_symbols,
     bits_per_qam_symbol,
 )
 
@@ -199,13 +226,12 @@ for snr_db_target in snr_dbs:
 
     equalized_data_freq = x_hat_sionna.reshape(
         num_frames,
-        num_data_ofdm_symbols,
-        num_subcarriers,
+        rg.num_data_symbols,
     )
 
     llr = demapper(
         equalized_data_freq.unsqueeze(-1),
-        no_eff.reshape(num_frames, num_data_ofdm_symbols, num_subcarriers).unsqueeze(-1),
+        no_eff.reshape(num_frames, rg.num_data_symbols).unsqueeze(-1),
     )
 
     llr_flat = llr.reshape(
