@@ -4,7 +4,6 @@ import numpy as np
 from sionna.phy import config
 from sionna.phy.channel import AWGN, TimeChannel
 from sionna.phy.mapping import BinarySource, Mapper, Demapper
-from sionna.phy.utils import count_errors
 from sionna.phy.mimo import StreamManagement
 from sionna.phy.fec.ldpc.encoding import LDPC5GEncoder
 from sionna.phy.fec.ldpc.decoding import LDPC5GDecoder
@@ -18,7 +17,7 @@ from sionna.phy.ofdm import (
     ResourceGrid,
     ResourceGridMapper,
 )
-from neural_receiver import NeuralDemapper
+from neural_receiver import NeuralDemapper, NeuralReceiverTrainer
 
 config.seed = 0
 
@@ -46,168 +45,6 @@ def build_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
         precision="single",
         device=device,
     )
-
-def run_one_batch(
-    batch_frames,
-    noise_power_target_tensor,
-    source,
-    ldpc_encoder,
-    mapper,
-    rg,
-    rg_mapper,
-    ofdm_modulator,
-    sionna_time_channel,
-    awgn,
-    ofdm_demodulator,
-    ls_estimator,
-    lmmse_equalizer,
-    demapper,
-    ldpc_decoder,
-    num_info_bits_per_frame,
-    num_coded_bits_per_frame,
-    bits_per_qam_symbol,
-):
-    info_bits = source([
-        batch_frames,
-        num_info_bits_per_frame,
-    ]).to(torch.long)
-
-    coded_bits_flat = ldpc_encoder(info_bits)
-
-    coded_bits = coded_bits_flat.reshape(
-        batch_frames,
-        rg.num_data_symbols,
-        bits_per_qam_symbol,
-    )
-
-    x_freq = mapper(coded_bits).squeeze(-1)
-
-    x_freq_sionna_input = x_freq.reshape(
-        batch_frames,
-        1,
-        1,
-        rg.num_data_symbols,
-    )
-
-    x_grid_sionna = rg_mapper(x_freq_sionna_input)
-
-    x_time_sionna = ofdm_modulator(x_grid_sionna)
-
-    y_time_clean = sionna_time_channel(x_time_sionna)
-
-    y_time = awgn(y_time_clean, noise_power_target_tensor)
-
-    y_grid_sionna = ofdm_demodulator(y_time)
-
-    h_hat_sionna, err_var = ls_estimator(
-        y_grid_sionna,
-        noise_power_target_tensor,
-    )
-
-    x_hat_sionna, no_eff = lmmse_equalizer(
-        y_grid_sionna,
-        h_hat_sionna,
-        err_var,
-        noise_power_target_tensor,
-    )
-
-    equalized_data_freq = x_hat_sionna.reshape(
-        batch_frames,
-        rg.num_data_symbols,
-    )
-
-    neural_features = torch.stack(
-        [
-            torch.real(equalized_data_freq),
-            torch.imag(equalized_data_freq),
-            torch.log(no_eff.reshape(batch_frames, rg.num_data_symbols)),
-        ],
-        dim=-1,
-    )
-
-    neural_labels = coded_bits.float()
-
-    features_flat = neural_features.reshape(
-        batch_frames * rg.num_data_symbols,
-        3,
-    )
-
-    labels_flat = neural_labels.reshape(
-        batch_frames * rg.num_data_symbols,
-        bits_per_qam_symbol,
-    )
-
-    return features_flat, labels_flat
-
-def run_one_snr(
-    snr_db_target,
-    total_frames,
-    batch_size,
-    device,
-    source,
-    ldpc_encoder,
-    mapper,
-    rg,
-    rg_mapper,
-    ofdm_modulator,
-    sionna_time_channel,
-    awgn,
-    ofdm_demodulator,
-    ls_estimator,
-    lmmse_equalizer,
-    demapper,
-    ldpc_decoder,
-    num_info_bits_per_frame,
-    num_coded_bits_per_frame,
-    bits_per_qam_symbol,
-):
-    snr_linear_target = 10 ** (snr_db_target / 10)
-    noise_power_target = 1 / snr_linear_target
-
-    noise_power_target_tensor = torch.tensor(
-        noise_power_target,
-        dtype=torch.float32,
-        device=device,
-    )
-
-    total_bit_errors = 0
-    total_frame_errors = 0
-    total_info_bits_done = 0
-    total_frames_done = 0
-
-    while total_frames_done < total_frames:
-        batch_frames = min(batch_size, total_frames - total_frames_done)
-
-        bit_errors, frame_errors, info_bits_done = run_one_batch(
-            batch_frames,
-            noise_power_target_tensor,
-            source,
-            ldpc_encoder,
-            mapper,
-            rg,
-            rg_mapper,
-            ofdm_modulator,
-            sionna_time_channel,
-            awgn,
-            ofdm_demodulator,
-            ls_estimator,
-            lmmse_equalizer,
-            demapper,
-            ldpc_decoder,
-            num_info_bits_per_frame,
-            num_coded_bits_per_frame,
-            bits_per_qam_symbol,
-        )
-
-        total_bit_errors += bit_errors
-        total_frame_errors += frame_errors
-        total_info_bits_done += info_bits_done
-        total_frames_done += batch_frames
-
-    ber = total_bit_errors / total_info_bits_done
-    fer = total_frame_errors / total_frames_done
-
-    return ber, fer
 
 def build_system(
     num_subcarriers,
@@ -363,63 +200,6 @@ def build_system(
         "num_info_bits_per_frame": num_info_bits_per_frame,
     }
 
-def run_snr_sweep(
-    snr_dbs,
-    total_frames,
-    batch_size,
-    device,
-    source,
-    ldpc_encoder,
-    mapper,
-    rg,
-    rg_mapper,
-    ofdm_modulator,
-    sionna_time_channel,
-    awgn,
-    ofdm_demodulator,
-    ls_estimator,
-    lmmse_equalizer,
-    demapper,
-    ldpc_decoder,
-    num_info_bits_per_frame,
-    num_coded_bits_per_frame,
-    bits_per_qam_symbol,
-):
-    ber_results = []
-
-    for snr_db_target in snr_dbs:
-        ber, fer = run_one_snr(
-            snr_db_target,
-            total_frames,
-            batch_size,
-            device,
-            source,
-            ldpc_encoder,
-            mapper,
-            rg,
-            rg_mapper,
-            ofdm_modulator,
-            sionna_time_channel,
-            awgn,
-            ofdm_demodulator,
-            ls_estimator,
-            lmmse_equalizer,
-            demapper,
-            ldpc_decoder,
-            num_info_bits_per_frame,
-            num_coded_bits_per_frame,
-            bits_per_qam_symbol,
-        )
-
-        ber_results.append(ber)
-
-        print("target SNR dB:", snr_db_target)
-        print("BER estimated channel:", ber)
-        print("FER:", fer)
-        print()
-
-    return ber_results
-
 def main():
 
     device = config.device
@@ -455,7 +235,6 @@ def main():
 
     source = system["source"]
     mapper = system["mapper"]
-    demapper = system["demapper"]
     awgn = system["awgn"]
     rg = system["rg"]
     rg_mapper = system["rg_mapper"]
@@ -473,90 +252,38 @@ def main():
 
     neural_demapper = NeuralDemapper().to(device)
 
-    loss_function = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(neural_demapper.parameters(), lr=1e-3)
-
-    snr_db_target = 12
-    snr_linear_target = 10 ** (snr_db_target / 10)
-    noise_power_target = 1 / snr_linear_target
-
-    noise_power_target_tensor = torch.tensor(
-        noise_power_target,
-        dtype=torch.float32,
+    trainer = NeuralReceiverTrainer(
+        neural_demapper=neural_demapper,
+        system=system,
+        bits_per_qam_symbol=bits_per_qam_symbol,
         device=device,
     )
 
-    num_training_steps = 200
-
-    for training_step in range(num_training_steps):
-        features_flat, labels_flat = run_one_batch(
-            batch_size,
-            noise_power_target_tensor,
-            source,
-            ldpc_encoder,
-            mapper,
-            rg,
-            rg_mapper,
-            ofdm_modulator,
-            sionna_time_channel,
-            awgn,
-            ofdm_demodulator,
-            ls_estimator,
-            lmmse_equalizer,
-            demapper,
-            ldpc_decoder,
-            num_info_bits_per_frame,
-            num_coded_bits_per_frame,
-            bits_per_qam_symbol,
-        )
-
-        predicted_llr_flat = neural_demapper(features_flat)
-
-        loss = loss_function(
-            predicted_llr_flat,
-            labels_flat,
-        )
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        if training_step % 20 == 0:
-            print("training step:", training_step, "loss:", loss.item())
-
-    with torch.no_grad():
-        predicted_bits = (predicted_llr_flat > 0).to(torch.float32)
-
-        bit_accuracy = torch.mean(
-            (predicted_bits == labels_flat).to(torch.float32)
-        )
-
-    print("neural coded-bit accuracy:", bit_accuracy.item())
-
-    raise SystemExit
-
-    ber_results = run_snr_sweep(
-        snr_dbs,
-        total_frames,
-        batch_size,
-        device,
-        source,
-        ldpc_encoder,
-        mapper,
-        rg,
-        rg_mapper,
-        ofdm_modulator,
-        sionna_time_channel,
-        awgn,
-        ofdm_demodulator,
-        ls_estimator,
-        lmmse_equalizer,
-        demapper,
-        ldpc_decoder,
-        num_info_bits_per_frame,
-        num_coded_bits_per_frame,
-        bits_per_qam_symbol,
+    trainer.train(
+        num_training_steps=200,
+        batch_size=batch_size,
+        training_snr_db=12,
     )
+
+    for snr_db in snr_dbs:
+        neural_ber, neural_fer = trainer.evaluate_snr(
+            snr_db=snr_db,
+            total_frames=total_frames,
+            batch_size=batch_size,
+        )
+
+        classical_ber, classical_fer = trainer.evaluate_classical_snr(
+            snr_db=snr_db,
+            total_frames=total_frames,
+            batch_size=batch_size,
+        )
+
+        print("target SNR dB:", snr_db)
+        print("BER neural receiver:", neural_ber)
+        print("FER neural receiver:", neural_fer)
+        print("BER classical receiver:", classical_ber)
+        print("FER classical receiver:", classical_fer)
+        print()
 
 if __name__ == "__main__":
     main()
