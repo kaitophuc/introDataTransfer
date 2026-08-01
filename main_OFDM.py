@@ -17,6 +17,7 @@ from sionna.phy.ofdm import (
     ResourceGrid,
     ResourceGridMapper,
 )
+from chart_maker import plot_receiver_comparison
 from neural_receiver import NeuralDemapper, NeuralReceiverTrainer
 
 config.seed = 0
@@ -265,6 +266,11 @@ def main():
         training_snr_db=12,
     )
 
+    neural_bers = []
+    neural_fers = []
+    classical_bers = []
+    classical_fers = []
+
     for snr_db in snr_dbs:
         neural_ber, neural_fer = trainer.evaluate_snr(
             snr_db=snr_db,
@@ -278,12 +284,26 @@ def main():
             batch_size=batch_size,
         )
 
+        neural_bers.append(neural_ber)
+        neural_fers.append(neural_fer)
+        classical_bers.append(classical_ber)
+        classical_fers.append(classical_fer)
+
         print("target SNR dB:", snr_db)
         print("BER neural receiver:", neural_ber)
         print("FER neural receiver:", neural_fer)
         print("BER classical receiver:", classical_ber)
         print("FER classical receiver:", classical_fer)
         print()
+
+    chart_path = plot_receiver_comparison(
+        snr_dbs,
+        neural_bers,
+        classical_bers,
+        neural_fers,
+        classical_fers,
+    )
+    print("saved chart:", chart_path)
 
 if __name__ == "__main__":
     main()
