@@ -96,78 +96,57 @@ class NeuralReceiverTrainer:
             noise_power_tensor,
         )
 
-        y_grid_no_sionna_dims = y_grid_sionna.squeeze(1).squeeze(1)
-
-        grid_features = torch.stack(
-            [
-                torch.real(y_grid_no_sionna_dims),
-                torch.imag(y_grid_no_sionna_dims),
-            ],
-            dim=1,
-        )
-
-        noise_feature = torch.full_like(
-            torch.real(y_grid_no_sionna_dims),
-            torch.log(noise_power_tensor),
-        )
-
         pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
-        pilot_mask = pilot_mask.to(device=self.device, dtype=torch.float32)
 
-        pilot_feature = pilot_mask.unsqueeze(0).expand(
-            batch_frames,
-            -1,
-            -1,
+        grid_features, data_mask = make_full_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask)
+
+        full_grid_receiver = FullGridNeuralReceiver().to(self.device)
+
+        predicted_llr = full_grid_receiver(
+            grid_features,
+            data_mask,
         )
 
-        data_mask = (~pilot_mask.bool()).to(torch.float32)
-
-        data_feature = data_mask.unsqueeze(0).expand(
-            batch_frames,
-            -1,
-            -1,
-        )
-
-        grid_features = torch.cat(
-            [
-                grid_features,
-                noise_feature.unsqueeze(1),
-            ],
-            dim=1,
+        loss_function = torch.nn.BCEWithLogitsLoss()
+        optimizer = torch.optim.Adam(
+            full_grid_receiver.parameters(),
+            lr=1e-3,
         )
         
-        grid_features = torch.cat(
-            [
+        for training_step in range(20):
+            full_grid_receiver.train()
+
+            predicted_llr = full_grid_receiver(
                 grid_features,
-                pilot_feature.unsqueeze(1),
-            ],
-            dim=1,
-        )
+                data_mask,
+            )
 
-        grid_features = torch.cat(
-            [
-                grid_features,
-                data_feature.unsqueeze(1),
-            ],
-            dim=1,
-        )
+            loss = loss_function(
+                predicted_llr,
+                coded_bits.float(),
+            )
 
-        fake_grid_llr = torch.zeros(
-            batch_frames,
-            self.bits_per_qam_symbol,
-            self.rg.num_ofdm_symbols,
-            self.rg.fft_size,
-            device=self.device,
-        )
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-        data_positions = data_mask.bool()
+            with torch.no_grad():
+                predicted_bits = (predicted_llr > 0).to(coded_bits.dtype)
 
-        fake_data_llr = fake_grid_llr.permute(0, 2, 3, 1)[:, data_positions, :]
+                accuracy = torch.mean(
+                    (predicted_bits == coded_bits).to(torch.float32)
+                )
 
-        print("fake_grid_llr shape:", fake_grid_llr.shape)
-        print("data_positions shape:", data_positions.shape)
-        print("fake_data_llr shape:", fake_data_llr.shape)
-        print("coded_bits shape:", coded_bits.shape)
+            if training_step % 2 == 0:
+                print(
+                    "training step:",
+                    training_step,
+                    "loss:",
+                    loss.item(),
+                    "coded-bits accuracy:",
+                    accuracy.item()
+                )
+        
         raise SystemExit
 
         x_hat_sionna, no_eff = self.lmmse_equalizer(
@@ -378,6 +357,26 @@ class NeuralReceiverTrainer:
 
         return ber, fer
 
+class FullGridNeuralReceiver(nn.Module):
+    def __init__(self, input_channels=5, hidden_channels=64, bits_per_symbol=4):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Conv2d(input_channels, hidden_channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(hidden_channels, bits_per_symbol, kernel_size=1),
+        )
+
+    def forward(self, grid_features, data_mask):
+        grid_llr = self.net(grid_features)
+
+        data_positions = data_mask.bool()
+        data_llr = grid_llr.permute(0, 2, 3, 1)[:, data_positions, :]
+
+        return data_llr
+
 def make_neural_features(equalized_data_freq, no_eff):
     no_eff = no_eff.reshape(equalized_data_freq.shape)
     no_eff = torch.clamp(no_eff, min=1e-12)
@@ -396,3 +395,44 @@ def flatten_neural_features(neural_features):
 
 def flatten_coded_bits(coded_bits):
     return coded_bits.float().reshape(-1, coded_bits.shape[-1])
+
+def make_full_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
+    y_grid = y_grid_sionna.squeeze(1).squeeze(1)
+
+    real_feature = torch.real(y_grid)
+    imag_feature = torch.imag(y_grid)
+
+    noise_feature = torch.full_like(
+        real_feature,
+        torch.log(noise_power_tensor),
+    )
+
+    device = y_grid.device
+    batch_frames = y_grid.shape[0]
+
+    pilot_mask = pilot_mask.to(device=device, dtype=torch.float32)
+    pilot_feature = pilot_mask.unsqueeze(0).expand(
+        batch_frames,
+        -1,
+        -1,
+    )
+
+    data_mask = (~pilot_mask.bool()).to(torch.float32)
+    data_feature = data_mask.unsqueeze(0).expand(
+        batch_frames,
+        -1,
+        -1,
+    )
+
+    grid_features = torch.stack(
+        [
+            real_feature,
+            imag_feature,
+            noise_feature,
+            pilot_feature,
+            data_feature,
+        ],
+        dim=1,
+    )
+
+    return grid_features, data_mask
