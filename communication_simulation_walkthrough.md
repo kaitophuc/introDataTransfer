@@ -1922,3 +1922,389 @@ LMMSE equalization
 soft demapping
 LDPC decoding
 ```
+
+## 46. Full-Grid Neural Receiver Plan
+
+The current neural receiver is really a neural demapper:
+
+```text
+received grid
+-> LS channel estimation
+-> LMMSE equalization
+-> neural demapper
+-> LDPC decoder
+```
+
+It only sees one equalized data resource element at a time:
+
+```text
+[real(equalized symbol), imag(equalized symbol), log(no_eff)]
+```
+
+The full-grid neural receiver goal is bigger:
+
+```text
+received OFDM resource grid
+-> neural receiver
+-> coded-bit LLRs
+-> LDPC decoder
+```
+
+That means the neural network learns to use pilots, neighboring subcarriers, neighboring OFDM symbols, and noise information. It starts to replace the classical receiver blocks:
+
+```text
+LS channel estimation
+LMMSE equalization
+classical demapping
+```
+
+The transmitter, channel, OFDM modulator/demodulator, and LDPC decoder stay the same at first. This keeps the experiment controlled.
+
+### Step 47. Freeze The Baseline
+
+Purpose:
+
+```text
+keep a trusted classical result to compare against
+```
+
+Baseline path:
+
+```text
+BinarySource
+-> LDPC encoder
+-> 16-QAM mapper
+-> ResourceGridMapper
+-> OFDMModulator
+-> TDL-A TimeChannel
+-> AWGN
+-> OFDMDemodulator
+-> LSChannelEstimator
+-> LMMSEEqualizer
+-> Sionna Demapper
+-> LDPC decoder
+```
+
+Done when:
+
+```text
+classical BER/FER still runs and chart generation still works
+```
+
+### Step 48. Expose The Right Training Tensors
+
+Purpose:
+
+```text
+the full-grid neural receiver needs the received grid before classical channel estimation/equalization
+```
+
+Training input should come from:
+
+```text
+y_grid_sionna
+```
+
+Target labels should come from:
+
+```text
+coded_bits
+```
+
+Important shapes:
+
+```text
+y_grid_sionna: [batch, 1, 1, 14, 64]
+coded_bits:    [batch, rg.num_data_symbols, 4]
+```
+
+Done when:
+
+```text
+we can print y_grid_sionna shape and coded_bits shape from one batch
+```
+
+### Step 49. Build Full-Grid Features
+
+Purpose:
+
+```text
+convert the complex received grid into real neural-network input channels
+```
+
+First simple feature stack:
+
+```text
+channel 0: real(y_grid_sionna)
+channel 1: imag(y_grid_sionna)
+channel 2: pilot mask
+channel 3: data mask
+channel 4: log(noise_power)
+```
+
+Target feature shape:
+
+```text
+grid_features: [batch, 5, 14, 64]
+```
+
+Done when:
+
+```text
+grid_features shape is correct and all values are finite
+```
+
+### Step 50. Decide Output Convention
+
+Purpose:
+
+```text
+the neural receiver should output soft bits for data resource elements only
+```
+
+Target output shape:
+
+```text
+predicted_llr: [batch, rg.num_data_symbols, 4]
+```
+
+Then flatten for LDPC:
+
+```text
+llr_flat: [batch, num_coded_bits_per_frame]
+```
+
+Done when:
+
+```text
+predicted_llr and coded_bits have matching shape
+```
+
+### Step 51. Create A Small FullGridNeuralReceiver
+
+Purpose:
+
+```text
+start with a simple CNN over the 2D OFDM grid
+```
+
+First model idea:
+
+```text
+Conv2d input channels 5
+-> ReLU
+-> Conv2d hidden channels
+-> ReLU
+-> Conv2d output channels 4
+```
+
+The model processes the whole grid:
+
+```text
+[batch, 5, 14, 64]
+-> [batch, 4, 14, 64]
+```
+
+Then we gather only data resource elements:
+
+```text
+[batch, 4, 14, 64]
+-> [batch, rg.num_data_symbols, 4]
+```
+
+Done when:
+
+```text
+one forward pass runs without training and output shape is correct
+```
+
+### Step 52. Train Without LDPC First
+
+Purpose:
+
+```text
+teach the neural receiver to output correct coded-bit logits
+```
+
+Loss:
+
+```python
+BCEWithLogitsLoss(predicted_llr, coded_bits.float())
+```
+
+This is the same idea as the current neural demapper training, but now the network sees the whole resource grid.
+
+Done when:
+
+```text
+training loss decreases
+coded-bit accuracy increases
+```
+
+### Step 53. Evaluate With LDPC Decoder
+
+Purpose:
+
+```text
+measure the real communication result, not only coded-bit accuracy
+```
+
+Evaluation path:
+
+```text
+y_grid_sionna
+-> FullGridNeuralReceiver
+-> llr_flat
+-> LDPC decoder
+-> decoded_info_bits
+-> BER/FER
+```
+
+Compare against:
+
+```text
+classical LS + LMMSE + Sionna Demapper
+current neural demapper after LMMSE
+```
+
+Done when:
+
+```text
+we have BER/FER curves for classical, neural demapper, and full-grid neural receiver
+```
+
+### Step 54. Make The Comparison Fair
+
+Purpose:
+
+```text
+avoid comparing receivers on different random channels and different random bits
+```
+
+Use the same generated batch for:
+
+```text
+classical receiver
+neural demapper
+full-grid neural receiver
+```
+
+Done when:
+
+```text
+one batch can produce all receiver outputs from the same y_grid_sionna
+```
+
+### Step 55. Train Across SNRs
+
+Purpose:
+
+```text
+make the receiver useful across a range of channel qualities
+```
+
+Instead of training only at 12 dB, sample SNR randomly:
+
+```text
+training SNR range: 0 dB to 20 dB
+```
+
+Done when:
+
+```text
+the full-grid receiver does not only work near one SNR
+```
+
+### Step 56. Improve The Neural Architecture
+
+Purpose:
+
+```text
+move from a tiny CNN toward a DeepRx-style full-grid receiver
+```
+
+Possible upgrades:
+
+```text
+residual CNN blocks
+batch normalization or layer normalization
+more hidden channels
+separate pilot/data feature channels
+noise-power conditioning
+2D attention later if CNN is not enough
+```
+
+Done when:
+
+```text
+the full-grid receiver beats or approaches the classical receiver in at least part of the SNR range
+```
+
+### Step 57. Pilot And Channel Experiments
+
+Purpose:
+
+```text
+test whether the neural receiver can use pilots better than the classical receiver
+```
+
+Experiments:
+
+```text
+reduce pilot density
+move pilot positions
+compare linear interpolation vs full-grid neural receiver
+test TDL-A, TDL-B, TDL-C
+test multiple speeds
+```
+
+Done when:
+
+```text
+we know where the neural receiver gives a real advantage
+```
+
+### Step 58. Save, Load, And Reuse Models
+
+Purpose:
+
+```text
+avoid retraining from zero every run
+```
+
+Add:
+
+```text
+save model weights
+load model weights
+separate train mode and evaluate mode
+record config with each result
+```
+
+Done when:
+
+```text
+we can train once, save, reload, and reproduce BER/FER
+```
+
+### Step 59. Research-Level Extensions
+
+After the full-grid receiver works, the next frontier directions are:
+
+```text
+SIMO/MIMO
+MU-MIMO
+dynamic MCS
+learned or reduced pilots
+site-specific channel training
+hardware impairments such as CFO, phase noise, and low-resolution ADC
+real-time inference constraints
+```
+
+These are later steps. The first serious milestone is:
+
+```text
+replace LS + LMMSE + demapper with one full-grid neural receiver
+while keeping the same transmitter, channel, and LDPC decoder
+```
+
