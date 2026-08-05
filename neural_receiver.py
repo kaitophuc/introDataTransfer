@@ -51,6 +51,17 @@ class NeuralReceiverTrainer:
             self.neural_demapper.parameters(),
             lr=1e-3,
         )
+        self.full_grid_receiver = FullGridNeuralReceiver(
+            input_channels=5,
+            bits_per_symbol=bits_per_qam_symbol,
+        ).to(device)
+
+        self.full_grid_loss_function = torch.nn.BCEWithLogitsLoss()
+
+        self.full_grid_optimizer = torch.optim.Adam(
+            self.full_grid_receiver.parameters(),
+            lr=1e-3,
+        )
 
     def run_ofdm_link_until_received_grid(self, batch_frames, noise_power):
         noise_power_tensor = torch.tensor(
@@ -98,67 +109,10 @@ class NeuralReceiverTrainer:
             self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
         )
 
-        print("info_bits:", info_bits.shape)
-        print("coded_bits:", coded_bits.shape)
-        print("y_grid_sionna:", y_grid_sionna.shape)
-        print("noise_power_tensor:", noise_power_tensor.shape)
-        raise SystemExit
-
         h_hat_sionna, err_var = self.ls_estimator(
             y_grid_sionna,
             noise_power_tensor,
         )
-
-        pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
-
-        grid_features, data_mask = make_full_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask)
-
-        full_grid_receiver = FullGridNeuralReceiver().to(self.device)
-
-        predicted_llr = full_grid_receiver(
-            grid_features,
-            data_mask,
-        )
-
-        loss_function = torch.nn.BCEWithLogitsLoss()
-        optimizer = torch.optim.Adam(
-            full_grid_receiver.parameters(),
-            lr=1e-3,
-        )
-        
-        for training_step in range(20):
-            full_grid_receiver.train()
-
-            predicted_llr = full_grid_receiver(
-                grid_features,
-                data_mask,
-            )
-
-            loss = loss_function(
-                predicted_llr,
-                coded_bits.float(),
-            )
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            with torch.no_grad():
-                predicted_bits = (predicted_llr > 0).to(coded_bits.dtype)
-
-                accuracy = torch.mean(
-                    (predicted_bits == coded_bits).to(torch.float32)
-                )
-
-            if training_step % 2 == 0:
-                print(
-                    "training step:",
-                    training_step,
-                    "loss:",
-                    loss.item(),
-                    "coded-bits accuracy:",
-                    accuracy.item()
-                )
 
         x_hat_sionna, no_eff = self.lmmse_equalizer(
             y_grid_sionna,
