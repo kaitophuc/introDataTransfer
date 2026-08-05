@@ -52,7 +52,7 @@ class NeuralReceiverTrainer:
             lr=1e-3,
         )
 
-    def run_receiver_front_end(self, batch_frames, noise_power):
+    def run_ofdm_link_until_received_grid(self, batch_frames, noise_power):
         noise_power_tensor = torch.tensor(
             noise_power,
             dtype=torch.float32,
@@ -90,6 +90,19 @@ class NeuralReceiverTrainer:
         y_time = self.awgn(y_time_clean, noise_power_tensor)
 
         y_grid_sionna = self.ofdm_demodulator(y_time)
+
+        return info_bits, coded_bits, y_grid_sionna, noise_power_tensor
+
+    def run_receiver_front_end(self, batch_frames, noise_power):
+        info_bits, coded_bits, y_grid_sionna, noise_power_tensor = (
+            self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
+        )
+
+        print("info_bits:", info_bits.shape)
+        print("coded_bits:", coded_bits.shape)
+        print("y_grid_sionna:", y_grid_sionna.shape)
+        print("noise_power_tensor:", noise_power_tensor.shape)
+        raise SystemExit
 
         h_hat_sionna, err_var = self.ls_estimator(
             y_grid_sionna,
@@ -146,8 +159,6 @@ class NeuralReceiverTrainer:
                     "coded-bits accuracy:",
                     accuracy.item()
                 )
-        
-        raise SystemExit
 
         x_hat_sionna, no_eff = self.lmmse_equalizer(
             y_grid_sionna,
