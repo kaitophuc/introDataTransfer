@@ -96,6 +96,80 @@ class NeuralReceiverTrainer:
             noise_power_tensor,
         )
 
+        y_grid_no_sionna_dims = y_grid_sionna.squeeze(1).squeeze(1)
+
+        grid_features = torch.stack(
+            [
+                torch.real(y_grid_no_sionna_dims),
+                torch.imag(y_grid_no_sionna_dims),
+            ],
+            dim=1,
+        )
+
+        noise_feature = torch.full_like(
+            torch.real(y_grid_no_sionna_dims),
+            torch.log(noise_power_tensor),
+        )
+
+        pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
+        pilot_mask = pilot_mask.to(device=self.device, dtype=torch.float32)
+
+        pilot_feature = pilot_mask.unsqueeze(0).expand(
+            batch_frames,
+            -1,
+            -1,
+        )
+
+        data_mask = (~pilot_mask.bool()).to(torch.float32)
+
+        data_feature = data_mask.unsqueeze(0).expand(
+            batch_frames,
+            -1,
+            -1,
+        )
+
+        grid_features = torch.cat(
+            [
+                grid_features,
+                noise_feature.unsqueeze(1),
+            ],
+            dim=1,
+        )
+        
+        grid_features = torch.cat(
+            [
+                grid_features,
+                pilot_feature.unsqueeze(1),
+            ],
+            dim=1,
+        )
+
+        grid_features = torch.cat(
+            [
+                grid_features,
+                data_feature.unsqueeze(1),
+            ],
+            dim=1,
+        )
+
+        fake_grid_llr = torch.zeros(
+            batch_frames,
+            self.bits_per_qam_symbol,
+            self.rg.num_ofdm_symbols,
+            self.rg.fft_size,
+            device=self.device,
+        )
+
+        data_positions = data_mask.bool()
+
+        fake_data_llr = fake_grid_llr.permute(0, 2, 3, 1)[:, data_positions, :]
+
+        print("fake_grid_llr shape:", fake_grid_llr.shape)
+        print("data_positions shape:", data_positions.shape)
+        print("fake_data_llr shape:", fake_data_llr.shape)
+        print("coded_bits shape:", coded_bits.shape)
+        raise SystemExit
+
         x_hat_sionna, no_eff = self.lmmse_equalizer(
             y_grid_sionna,
             h_hat_sionna,
