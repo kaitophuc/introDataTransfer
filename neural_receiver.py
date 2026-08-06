@@ -30,7 +30,7 @@ class OFDMNeuralReceiverTrainer:
         self.num_info_bits_per_frame = system["num_info_bits_per_frame"]
 
         self.full_grid_receiver = FullGridNeuralReceiver(
-            input_channels=5,
+            input_channels=7,
             bits_per_symbol=bits_per_qam_symbol,
         ).to(device)
 
@@ -323,7 +323,7 @@ class OFDMNeuralReceiverTrainer:
         return ber, fer
 
 class FullGridNeuralReceiver(nn.Module):
-    def __init__(self, input_channels=5, hidden_channels=64, bits_per_symbol=4):
+    def __init__(self, input_channels=7, hidden_channels=64, bits_per_symbol=4):
         super().__init__()
 
         self.net = nn.Sequential(
@@ -370,6 +370,12 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
         -1,
     )
 
+    time_index = torch.linspace(-1.0, 1.0, y_grid.shape[1], device=device)
+    freq_index = torch.linspace(-1.0, 1.0, y_grid.shape[2], device=device)
+
+    time_feature = time_index.view(1, -1, 1).expand(batch_frames, -1, y_grid.shape[2])
+    freq_feature = freq_index.view(1, 1, -1).expand(batch_frames, y_grid.shape[1], -1)
+
     grid_features = torch.stack(
         [
             real_feature,
@@ -377,6 +383,8 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
             noise_feature,
             pilot_feature,
             data_feature,
+            time_feature,
+            freq_feature,
         ],
         dim=1,
     )
