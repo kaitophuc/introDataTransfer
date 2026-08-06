@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class NeuralReceiverTrainer:
+class OFDMNeuralReceiverTrainer:
     def __init__(
         self,
         system,
@@ -41,7 +41,7 @@ class NeuralReceiverTrainer:
             lr=1e-3,
         )
 
-    def run_ofdm_link_until_received_grid(self, batch_frames, noise_power):
+    def generate_received_grid_batch(self, batch_frames, noise_power):
         noise_power_tensor = torch.tensor(
             noise_power,
             dtype=torch.float32,
@@ -82,9 +82,9 @@ class NeuralReceiverTrainer:
 
         return info_bits, coded_bits, y_grid_sionna, noise_power_tensor
 
-    def run_receiver_front_end(self, batch_frames, noise_power):
+    def run_classical_frontend_batch(self, batch_frames, noise_power):
         info_bits, coded_bits, y_grid_sionna, noise_power_tensor = (
-            self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
+            self.generate_received_grid_batch(batch_frames, noise_power)
         )
 
         h_hat_sionna, err_var = self.ls_estimator(
@@ -105,14 +105,14 @@ class NeuralReceiverTrainer:
         )
         return info_bits, coded_bits, equalized_data_freq, no_eff
 
-    def generate_training_batch(self, batch_frames, noise_power):
+    def generate_neural_training_batch(self, batch_frames, noise_power):
         info_bits, coded_bits, y_grid_sionna, noise_power_tensor = (
-            self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
+            self.generate_received_grid_batch(batch_frames, noise_power)
         )
 
         pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
 
-        grid_features, data_mask = make_full_grid_features(
+        grid_features, data_mask = make_neural_grid_features(
             y_grid_sionna,
             noise_power_tensor,
             pilot_mask,
@@ -123,7 +123,7 @@ class NeuralReceiverTrainer:
         return grid_features, data_mask, labels
 
     def train_step(self, batch_frames, noise_power):
-        grid_features, data_mask, labels = self.generate_training_batch(
+        grid_features, data_mask, labels = self.generate_neural_training_batch(
             batch_frames,
             noise_power,
         )
@@ -196,14 +196,14 @@ class NeuralReceiverTrainer:
 
         return last_loss, last_accuracy
 
-    def evaluate_batch(self, batch_frames, noise_power):
+    def evaluate_neural_batch(self, batch_frames, noise_power):
         info_bits, _, y_grid_sionna, noise_power_tensor = (
-            self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
+            self.generate_received_grid_batch(batch_frames, noise_power)
         )
 
         pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
 
-        grid_features, data_mask = make_full_grid_features(
+        grid_features, data_mask = make_neural_grid_features(
             y_grid_sionna,
             noise_power_tensor,
             pilot_mask,
@@ -235,7 +235,7 @@ class NeuralReceiverTrainer:
             batch_frames * self.num_info_bits_per_frame,
         )
 
-    def evaluate_snr(self, snr_db, total_frames, batch_size):
+    def evaluate_neural_snr(self, snr_db, total_frames, batch_size):
         snr_linear = 10 ** (snr_db / 10)
         noise_power = 1 / snr_linear
 
@@ -250,7 +250,7 @@ class NeuralReceiverTrainer:
                 total_frames - total_frames_done,
             )
 
-            bit_errors, frame_errors, info_bits = self.evaluate_batch(
+            bit_errors, frame_errors, info_bits = self.evaluate_neural_batch(
                 batch_frames,
                 noise_power,
             )
@@ -267,7 +267,7 @@ class NeuralReceiverTrainer:
 
 
     def evaluate_classical_batch(self, batch_frames, noise_power):
-        info_bits, _, equalized_data_freq, no_eff = self.run_receiver_front_end(batch_frames, noise_power)
+        info_bits, _, equalized_data_freq, no_eff = self.run_classical_frontend_batch(batch_frames, noise_power)
 
         llr = self.demapper(
             equalized_data_freq.unsqueeze(-1),
@@ -342,7 +342,7 @@ class FullGridNeuralReceiver(nn.Module):
 
         return data_llr
 
-def make_full_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
+def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
     y_grid = y_grid_sionna.squeeze(1).squeeze(1)
 
     real_feature = torch.real(y_grid)

@@ -4,7 +4,7 @@ def plot_receiver_comparison(
     classical_bers,
     neural_fers,
     classical_fers,
-    output_path="neural_vs_classical_receiver.png",
+    output_path="results/neural_vs_classical_receiver.png",
     workflow_note=None,
 ):
     import matplotlib

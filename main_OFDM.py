@@ -18,17 +18,17 @@ from sionna.phy.ofdm import (
     ResourceGridMapper,
 )
 from chart_maker import plot_receiver_comparison
-from neural_receiver import NeuralReceiverTrainer
+from neural_receiver import OFDMNeuralReceiverTrainer
 import csv
 
 training_seed = 0
 evaluation_seeds = [1000, 1001, 1002]
 
 config.seed = training_seed
-train_model = False
-model_path = "full_grid_receiver.pt"
+should_train_model = False
+checkpoint_path = "checkpoints/full_grid_receiver.pt"
 
-def build_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
+def build_comb_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
     pilot_mask = torch.zeros(
         (1, 1, num_ofdm_symbols, num_subcarriers),
         dtype=torch.bool,
@@ -53,7 +53,7 @@ def build_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
         device=device,
     )
 
-def build_system(
+def build_ofdm_system(
     num_subcarriers,
     num_ofdm_symbols,
     bits_per_qam_symbol,
@@ -81,7 +81,7 @@ def build_system(
 
     awgn = AWGN(precision="single", device=device)
 
-    pilot_pattern = build_scattered_pilot_pattern(
+    pilot_pattern = build_comb_scattered_pilot_pattern(
         num_ofdm_symbols,
         num_subcarriers,
         device,
@@ -96,7 +96,6 @@ def build_system(
         cyclic_prefix_length=cp_len,
         dc_null=False,
         pilot_pattern=pilot_pattern,
-        pilot_ofdm_symbol_indices=[0, 7, 13],
         precision="single",
         device=device,
     )
@@ -231,7 +230,7 @@ def main():
     cp_len = sim_config["cp_len"]
     snr_dbs = sim_config["snr_dbs"]
 
-    system = build_system(
+    ofdm_system = build_ofdm_system(
         num_subcarriers,
         num_ofdm_symbols,
         bits_per_qam_symbol,
@@ -240,17 +239,17 @@ def main():
         device,
     )
 
-    num_coded_bits_per_frame = system["num_coded_bits_per_frame"]
+    num_coded_bits_per_frame = ofdm_system["num_coded_bits_per_frame"]
     
     total_frames = math.ceil(target_coded_bits / num_coded_bits_per_frame)
 
-    trainer = NeuralReceiverTrainer(
-        system=system,
+    trainer = OFDMNeuralReceiverTrainer(
+        system=ofdm_system,
         bits_per_qam_symbol=bits_per_qam_symbol,
         device=device,
     )
 
-    if train_model:
+    if should_train_model:
 
         trainer.train(
             num_training_steps=2000,
@@ -262,7 +261,7 @@ def main():
 
         torch.save(
             trainer.full_grid_receiver.state_dict(),
-            "full_grid_receiver.pt",
+            "checkpoints/full_grid_receiver.pt",
         )
 
         print("saved model: full_grid_receiver.pt")
@@ -270,12 +269,12 @@ def main():
     else:
         trainer.full_grid_receiver.load_state_dict(
             torch.load(
-                model_path,
+                checkpoint_path,
                 map_location=device,
             )
         )
 
-        print("loaded model:", model_path)
+        print("loaded model:", checkpoint_path)
 
     neural_bers = []
     neural_fers = []
@@ -291,7 +290,7 @@ def main():
         for evaluation_seed in evaluation_seeds:
             config.seed = evaluation_seed
 
-            neural_ber, neural_fer = trainer.evaluate_snr(
+            neural_ber, neural_fer = trainer.evaluate_neural_snr(
                 snr_db=snr_db,
                 total_frames=total_frames,
                 batch_size=batch_size,
@@ -338,7 +337,7 @@ def main():
     )
     print("saved chart:", chart_path)
 
-    csv_path = "neural_vs_classical_receiver.csv"
+    csv_path = "results/neural_vs_classical_receiver.csv"
 
     with open(csv_path, "w", newline="") as csv_file:
         writer = csv.writer(csv_file)
