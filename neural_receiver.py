@@ -1,30 +1,13 @@
 import torch
 import torch.nn as nn
 
-class NeuralDemapper(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.net = nn.Sequential(
-            nn.Linear(3, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, 4),
-        )
-
-    def forward(self, features):
-        return self.net(features)
-
 class NeuralReceiverTrainer:
     def __init__(
         self,
-        neural_demapper,
         system,
         bits_per_qam_symbol,
         device,
     ):
-        self.neural_demapper = neural_demapper
         self.system = system
         self.bits_per_qam_symbol = bits_per_qam_symbol
         self.device = device
@@ -46,11 +29,6 @@ class NeuralReceiverTrainer:
         self.num_coded_bits_per_frame = system["num_coded_bits_per_frame"]
         self.num_info_bits_per_frame = system["num_info_bits_per_frame"]
 
-        self.loss_function = torch.nn.BCEWithLogitsLoss()
-        self.optimizer = torch.optim.Adam(
-            self.neural_demapper.parameters(),
-            lr=1e-3,
-        )
         self.full_grid_receiver = FullGridNeuralReceiver(
             input_channels=5,
             bits_per_symbol=bits_per_qam_symbol,
@@ -127,64 +105,110 @@ class NeuralReceiverTrainer:
         )
         return info_bits, coded_bits, equalized_data_freq, no_eff
 
-
     def generate_training_batch(self, batch_frames, noise_power):
-
-        info_bits, coded_bits, equalized_data_freq, no_eff = self.run_receiver_front_end(batch_frames, noise_power)
-        
-        neural_features = make_neural_features(
-            equalized_data_freq,
-            no_eff,
+        info_bits, coded_bits, y_grid_sionna, noise_power_tensor = (
+            self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
         )
 
-        features_flat = flatten_neural_features(neural_features)
+        pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
 
-        labels_flat = flatten_coded_bits(coded_bits)
+        grid_features, data_mask = make_full_grid_features(
+            y_grid_sionna,
+            noise_power_tensor,
+            pilot_mask,
+        )
 
-        return features_flat, labels_flat
+        labels = coded_bits.float()
+
+        return grid_features, data_mask, labels
 
     def train_step(self, batch_frames, noise_power):
-        features_flat, labels_flat = self.generate_training_batch(
+        grid_features, data_mask, labels = self.generate_training_batch(
             batch_frames,
             noise_power,
         )
 
-        self.neural_demapper.train()
+        self.full_grid_receiver.train()
 
-        predicted_llr_flat = self.neural_demapper(features_flat)
-
-        loss = self.loss_function(
-            predicted_llr_flat,
-            labels_flat,
+        predicted_llr = self.full_grid_receiver(
+            grid_features,
+            data_mask,
         )
 
-        self.optimizer.zero_grad()
+        loss = self.full_grid_loss_function(
+            predicted_llr,
+            labels,
+        )
+
+        self.full_grid_optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        self.full_grid_optimizer.step()
 
         with torch.no_grad():
-            predicted_bits = (predicted_llr_flat > 0).to(labels_flat.dtype)
+            predicted_bits = (predicted_llr > 0).to(labels.dtype)
 
             bit_accuracy = torch.mean(
-                (predicted_bits == labels_flat).to(torch.float32)
+                (predicted_bits == labels).to(torch.float32)
             )
 
         return loss.item(), bit_accuracy.item()
 
-    def evaluate_receiver_batch(self, batch_frames, noise_power):
-        info_bits, _, equalized_data_freq, no_eff = self.run_receiver_front_end(batch_frames, noise_power)
+    def train(
+        self,
+        num_training_steps,
+        batch_size,
+        training_snr_db,
+        print_every=20,
+    ):
+        snr_linear = 10 ** (training_snr_db / 10)
+        noise_power = 1 / snr_linear
 
-        neural_features = make_neural_features(
-            equalized_data_freq,
-            no_eff,
+        last_loss = None
+        last_accuracy = None
+
+        for training_step in range(num_training_steps):
+            loss, accuracy = self.train_step(
+                batch_size,
+                noise_power,
+            )
+
+            last_loss = loss
+            last_accuracy = accuracy
+
+            if training_step % print_every == 0:
+                print(
+                    "full-grid training step:",
+                    training_step,
+                    "loss:",
+                    loss,
+                    "accuracy:",
+                    accuracy,
+                )
+
+        return last_loss, last_accuracy
+
+    def evaluate_batch(self, batch_frames, noise_power):
+        info_bits, _, y_grid_sionna, noise_power_tensor = (
+            self.run_ofdm_link_until_received_grid(batch_frames, noise_power)
         )
 
-        features_flat = flatten_neural_features(neural_features)
+        pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
 
-        self.neural_demapper.eval()
+        grid_features, data_mask = make_full_grid_features(
+            y_grid_sionna,
+            noise_power_tensor,
+            pilot_mask,
+        )
+
+        self.full_grid_receiver.eval()
 
         with torch.no_grad():
-            llr_flat = self.neural_demapper(features_flat).reshape(
+            llr = self.full_grid_receiver(
+                grid_features,
+                data_mask,
+            )
+
+            llr_flat = llr.reshape(
                 batch_frames,
                 self.num_coded_bits_per_frame,
             )
@@ -217,7 +241,7 @@ class NeuralReceiverTrainer:
                 total_frames - total_frames_done,
             )
 
-            bit_errors, frame_errors, info_bits = self.evaluate_receiver_batch(
+            bit_errors, frame_errors, info_bits = self.evaluate_batch(
                 batch_frames,
                 noise_power,
             )
@@ -232,39 +256,6 @@ class NeuralReceiverTrainer:
 
         return ber, fer
 
-    def train(
-        self,
-        num_training_steps,
-        batch_size,
-        training_snr_db,
-        print_every=20,
-    ):
-        snr_linear = 10 ** (training_snr_db / 10)
-        noise_power = 1 / snr_linear
-
-        last_loss = None
-        last_accuracy = None
-
-        for training_step in range(num_training_steps):
-            loss, accuracy = self.train_step(
-                batch_size,
-                noise_power,
-            )
-
-            last_loss = loss
-            last_accuracy = accuracy
-
-            if training_step % print_every == 0:
-                print(
-                    "training step:",
-                    training_step,
-                    "loss:",
-                    loss,
-                    "accuracy:",
-                    accuracy,
-                )
-
-        return last_loss, last_accuracy
 
     def evaluate_classical_batch(self, batch_frames, noise_power):
         info_bits, _, equalized_data_freq, no_eff = self.run_receiver_front_end(batch_frames, noise_power)
@@ -341,25 +332,6 @@ class FullGridNeuralReceiver(nn.Module):
         data_llr = grid_llr.permute(0, 2, 3, 1)[:, data_positions, :]
 
         return data_llr
-
-def make_neural_features(equalized_data_freq, no_eff):
-    no_eff = no_eff.reshape(equalized_data_freq.shape)
-    no_eff = torch.clamp(no_eff, min=1e-12)
-
-    return torch.stack(
-        [
-            torch.real(equalized_data_freq),
-            torch.imag(equalized_data_freq),
-            torch.log(no_eff),
-        ],
-        dim=-1,
-    )
-
-def flatten_neural_features(neural_features):
-    return neural_features.reshape(-1, neural_features.shape[-1])
-
-def flatten_coded_bits(coded_bits):
-    return coded_bits.float().reshape(-1, coded_bits.shape[-1])
 
 def make_full_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
     y_grid = y_grid_sionna.squeeze(1).squeeze(1)

@@ -18,7 +18,7 @@ from sionna.phy.ofdm import (
     ResourceGridMapper,
 )
 from chart_maker import plot_receiver_comparison
-from neural_receiver import NeuralDemapper, NeuralReceiverTrainer
+from neural_receiver import NeuralReceiverTrainer
 
 config.seed = 0
 
@@ -234,27 +234,12 @@ def main():
         device,
     )
 
-    source = system["source"]
-    mapper = system["mapper"]
-    awgn = system["awgn"]
-    rg = system["rg"]
-    rg_mapper = system["rg_mapper"]
-    ofdm_modulator = system["ofdm_modulator"]
-    ofdm_demodulator = system["ofdm_demodulator"]
-    ls_estimator = system["ls_estimator"]
-    lmmse_equalizer = system["lmmse_equalizer"]
-    sionna_time_channel = system["sionna_time_channel"]
-    ldpc_encoder = system["ldpc_encoder"]
-    ldpc_decoder = system["ldpc_decoder"]
     num_coded_bits_per_frame = system["num_coded_bits_per_frame"]
     num_info_bits_per_frame = system["num_info_bits_per_frame"]
     
     total_frames = math.ceil(target_coded_bits / num_coded_bits_per_frame)
 
-    neural_demapper = NeuralDemapper().to(device)
-
     trainer = NeuralReceiverTrainer(
-        neural_demapper=neural_demapper,
         system=system,
         bits_per_qam_symbol=bits_per_qam_symbol,
         device=device,
