@@ -19,9 +19,12 @@ from sionna.phy.ofdm import (
 )
 from chart_maker import plot_receiver_comparison
 from neural_receiver import NeuralReceiverTrainer
+import csv
 
-config.seed = 0
-num_eval_repeats = 3
+training_seed = 0
+evaluation_seeds = [1000, 1001, 1002]
+
+config.seed = training_seed
 train_model = False
 model_path = "full_grid_receiver.pt"
 
@@ -238,7 +241,6 @@ def main():
     )
 
     num_coded_bits_per_frame = system["num_coded_bits_per_frame"]
-    num_info_bits_per_frame = system["num_info_bits_per_frame"]
     
     total_frames = math.ceil(target_coded_bits / num_coded_bits_per_frame)
 
@@ -286,12 +288,16 @@ def main():
         classical_ber_sum = 0.0
         classical_fer_sum = 0.0
 
-        for _ in range(num_eval_repeats):
+        for evaluation_seed in evaluation_seeds:
+            config.seed = evaluation_seed
+
             neural_ber, neural_fer = trainer.evaluate_snr(
                 snr_db=snr_db,
                 total_frames=total_frames,
                 batch_size=batch_size,
             )
+
+            config.seed = evaluation_seed
 
             classical_ber, classical_fer = trainer.evaluate_classical_snr(
                 snr_db=snr_db,
@@ -304,10 +310,12 @@ def main():
             classical_ber_sum += classical_ber
             classical_fer_sum += classical_fer
 
-        neural_ber = neural_ber_sum / num_eval_repeats
-        neural_fer = neural_fer_sum / num_eval_repeats
-        classical_ber = classical_ber_sum / num_eval_repeats
-        classical_fer = classical_fer_sum / num_eval_repeats
+        num_evaluation_seeds = len(evaluation_seeds)
+
+        neural_ber = neural_ber_sum / num_evaluation_seeds
+        neural_fer = neural_fer_sum / num_evaluation_seeds
+        classical_ber = classical_ber_sum / num_evaluation_seeds
+        classical_fer = classical_fer_sum / num_evaluation_seeds
 
         neural_bers.append(neural_ber)
         neural_fers.append(neural_fer)
@@ -329,6 +337,50 @@ def main():
         classical_fers,
     )
     print("saved chart:", chart_path)
+
+    csv_path = "neural_vs_classical_receiver.csv"
+
+    with open(csv_path, "w", newline="") as csv_file:
+        writer = csv.writer(csv_file)
+
+        writer.writerow([
+            "training_seed",
+            "evaluation_seeds",
+            "target_coded_bits",
+            "batch_size",
+            "num_subcarriers",
+            "num_ofdm_symbols",
+            "bits_per_qam_symbol",
+            "code_rate",
+            "cp_len",
+            "snr_db",
+            "neural_ber",
+            "neural_fer",
+            "classical_ber",
+            "classical_fer",
+        ])
+
+        for row in zip(
+            snr_dbs,
+            neural_bers,
+            neural_fers,
+            classical_bers,
+            classical_fers,
+        ):
+            writer.writerow([
+                training_seed,
+                ";".join(str(seed) for seed in evaluation_seeds),
+                target_coded_bits,
+                batch_size,
+                num_subcarriers,
+                num_ofdm_symbols,
+                bits_per_qam_symbol,
+                code_rate,
+                cp_len,
+                *row,
+            ])
+
+    print("saved results:", csv_path)
 
 if __name__ == "__main__":
     main()
