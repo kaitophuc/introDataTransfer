@@ -30,7 +30,7 @@ class OFDMNeuralReceiverTrainer:
         self.num_info_bits_per_frame = system["num_info_bits_per_frame"]
 
         self.full_grid_receiver = FullGridNeuralReceiver(
-            input_channels=7,
+            input_channels=10,
             bits_per_symbol=bits_per_qam_symbol,
         ).to(device)
 
@@ -112,10 +112,17 @@ class OFDMNeuralReceiverTrainer:
 
         pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
 
+        h_hat_sionna, err_var = self.ls_estimator(
+            y_grid_sionna,
+            noise_power_tensor,
+        )
+
         grid_features, data_mask = make_neural_grid_features(
             y_grid_sionna,
             noise_power_tensor,
             pilot_mask,
+            h_hat_sionna,
+            err_var,
         )
 
         labels = coded_bits.float()
@@ -203,10 +210,17 @@ class OFDMNeuralReceiverTrainer:
 
         pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
 
+        h_hat_sionna, err_var = self.ls_estimator(
+            y_grid_sionna,
+            noise_power_tensor,
+        )
+
         grid_features, data_mask = make_neural_grid_features(
             y_grid_sionna,
             noise_power_tensor,
             pilot_mask,
+            h_hat_sionna,
+            err_var,
         )
 
         self.full_grid_receiver.eval()
@@ -323,7 +337,7 @@ class OFDMNeuralReceiverTrainer:
         return ber, fer
 
 class FullGridNeuralReceiver(nn.Module):
-    def __init__(self, input_channels=7, hidden_channels=64, bits_per_symbol=4):
+    def __init__(self, input_channels=10, hidden_channels=64, bits_per_symbol=4):
         super().__init__()
 
         self.net = nn.Sequential(
@@ -342,8 +356,11 @@ class FullGridNeuralReceiver(nn.Module):
 
         return data_llr
 
-def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
+def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_hat_sionna, err_var,):
     y_grid = y_grid_sionna.squeeze(1).squeeze(1)
+
+    h_hat_grid = h_hat_sionna.squeeze(1).squeeze(1).squeeze(1).squeeze(1)
+    err_var_grid = err_var.squeeze(1).squeeze(1).squeeze(1).squeeze(1)
 
     real_feature = torch.real(y_grid)
     imag_feature = torch.imag(y_grid)
@@ -376,6 +393,10 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
     time_feature = time_index.view(1, -1, 1).expand(batch_frames, -1, y_grid.shape[2])
     freq_feature = freq_index.view(1, 1, -1).expand(batch_frames, y_grid.shape[1], -1)
 
+    h_hat_real_feature = torch.real(h_hat_grid)
+    h_hat_imag_feature = torch.imag(h_hat_grid)
+    err_var_feature = torch.log(err_var_grid + 1e-12)
+
     grid_features = torch.stack(
         [
             real_feature,
@@ -385,6 +406,9 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask):
             data_feature,
             time_feature,
             freq_feature,
+            h_hat_real_feature,
+            h_hat_imag_feature,
+            err_var_feature,
         ],
         dim=1,
     )

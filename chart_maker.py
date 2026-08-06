@@ -1,3 +1,12 @@
+DEFAULT_WORKFLOW_NOTE = "\n".join(
+    [
+        "Workflow: Sionna BinarySource -> LDPC encoder -> 16-QAM mapper -> ResourceGrid with scattered pilots -> OFDM modulator -> TDL-A channel + AWGN -> OFDM demodulator.",
+        "Neural path: full received grid -> CNN neural receiver -> LDPC decoder.",
+        "Classical path: LS channel estimate -> LMMSE equalizer -> APP demapper -> LDPC decoder.",
+    ]
+)
+
+
 def plot_receiver_comparison(
     snr_dbs,
     neural_bers,
@@ -21,15 +30,9 @@ def plot_receiver_comparison(
     classical_fers_plot = _floor_for_log_plot(classical_fers, plot_floor)
 
     if workflow_note is None:
-        workflow_note = (
-            "Workflow: Sionna BinarySource -> LDPC encoder -> 16-QAM mapper -> "
-            "ResourceGrid with scattered pilots -> OFDM modulator -> TDL-A channel + AWGN -> "
-            "OFDM demodulator. Neural path: full received grid -> CNN neural receiver -> "
-            "LDPC decoder. Classical path: LS channel estimate -> LMMSE equalizer -> "
-            "APP demapper -> LDPC decoder."
-        )
+        workflow_note = DEFAULT_WORKFLOW_NOTE
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.8))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6.2))
 
     axes[0].semilogy(
         snr_dbs,
@@ -74,7 +77,6 @@ def plot_receiver_comparison(
         ha="center",
         va="bottom",
         fontsize=8.5,
-        wrap=True,
         bbox={
             "boxstyle": "round,pad=0.45",
             "facecolor": "#f7f7f7",
@@ -82,7 +84,7 @@ def plot_receiver_comparison(
         },
     )
 
-    fig.tight_layout(rect=(0, 0.16, 1, 1))
+    fig.tight_layout(rect=(0, 0.2, 1, 1))
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
 
