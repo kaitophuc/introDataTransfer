@@ -23,9 +23,10 @@ def plot_receiver_comparison(
     if workflow_note is None:
         workflow_note = (
             "Workflow: Sionna BinarySource -> LDPC encoder -> 16-QAM mapper -> "
-            "ResourceGrid + pilots -> OFDM modulator -> TDL-A channel + AWGN -> "
-            "OFDM demodulator -> LS channel estimate -> LMMSE equalizer -> "
-            "neural/classical demapper -> LDPC decoder -> BER/FER"
+            "ResourceGrid with scattered pilots -> OFDM modulator -> TDL-A channel + AWGN -> "
+            "OFDM demodulator. Neural path: full received grid -> CNN neural receiver -> "
+            "LDPC decoder. Classical path: LS channel estimate -> LMMSE equalizer -> "
+            "APP demapper -> LDPC decoder."
         )
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.8))

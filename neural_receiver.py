@@ -157,16 +157,23 @@ class NeuralReceiverTrainer:
         self,
         num_training_steps,
         batch_size,
-        training_snr_db,
+        training_snr_db_min,
+        training_snr_db_max,
         print_every=20,
     ):
-        snr_linear = 10 ** (training_snr_db / 10)
-        noise_power = 1 / snr_linear
-
         last_loss = None
         last_accuracy = None
 
         for training_step in range(num_training_steps):
+
+            random_snr_db = torch.empty(
+                (),
+                device=self.device,
+            ).uniform_(training_snr_db_min, training_snr_db_max).item()
+
+            snr_linear = 10 ** (random_snr_db / 10)
+            noise_power = 1 / snr_linear
+            
             loss, accuracy = self.train_step(
                 batch_size,
                 noise_power,
@@ -179,6 +186,8 @@ class NeuralReceiverTrainer:
                 print(
                     "full-grid training step:",
                     training_step,
+                    "train SNR dB:",
+                    random_snr_db,
                     "loss:",
                     loss,
                     "accuracy:",

@@ -21,6 +21,9 @@ from chart_maker import plot_receiver_comparison
 from neural_receiver import NeuralReceiverTrainer
 
 config.seed = 0
+num_eval_repeats = 3
+train_model = False
+model_path = "full_grid_receiver.pt"
 
 def build_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
     pilot_mask = torch.zeros(
@@ -245,11 +248,32 @@ def main():
         device=device,
     )
 
-    trainer.train(
-        num_training_steps=200,
-        batch_size=batch_size,
-        training_snr_db=12,
-    )
+    if train_model:
+
+        trainer.train(
+            num_training_steps=2000,
+            batch_size=batch_size,
+            training_snr_db_min=6.0,
+            training_snr_db_max=16.0,
+            print_every=100,
+        )
+
+        torch.save(
+            trainer.full_grid_receiver.state_dict(),
+            "full_grid_receiver.pt",
+        )
+
+        print("saved model: full_grid_receiver.pt")
+
+    else:
+        trainer.full_grid_receiver.load_state_dict(
+            torch.load(
+                model_path,
+                map_location=device,
+            )
+        )
+
+        print("loaded model:", model_path)
 
     neural_bers = []
     neural_fers = []
@@ -257,17 +281,33 @@ def main():
     classical_fers = []
 
     for snr_db in snr_dbs:
-        neural_ber, neural_fer = trainer.evaluate_snr(
-            snr_db=snr_db,
-            total_frames=total_frames,
-            batch_size=batch_size,
-        )
+        neural_ber_sum = 0.0
+        neural_fer_sum = 0.0
+        classical_ber_sum = 0.0
+        classical_fer_sum = 0.0
 
-        classical_ber, classical_fer = trainer.evaluate_classical_snr(
-            snr_db=snr_db,
-            total_frames=total_frames,
-            batch_size=batch_size,
-        )
+        for _ in range(num_eval_repeats):
+            neural_ber, neural_fer = trainer.evaluate_snr(
+                snr_db=snr_db,
+                total_frames=total_frames,
+                batch_size=batch_size,
+            )
+
+            classical_ber, classical_fer = trainer.evaluate_classical_snr(
+                snr_db=snr_db,
+                total_frames=total_frames,
+                batch_size=batch_size,
+            )
+
+            neural_ber_sum += neural_ber
+            neural_fer_sum += neural_fer
+            classical_ber_sum += classical_ber
+            classical_fer_sum += classical_fer
+
+        neural_ber = neural_ber_sum / num_eval_repeats
+        neural_fer = neural_fer_sum / num_eval_repeats
+        classical_ber = classical_ber_sum / num_eval_repeats
+        classical_fer = classical_fer_sum / num_eval_repeats
 
         neural_bers.append(neural_ber)
         neural_fers.append(neural_fer)
