@@ -25,7 +25,7 @@ training_seed = 0
 evaluation_seeds = [1000, 1001, 1002]
 
 config.seed = training_seed
-should_train_model = True
+should_train_model = False
 checkpoint_path = "checkpoints/full_grid_receiver.pt"
 
 def build_comb_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
@@ -59,6 +59,9 @@ def build_ofdm_system(
     bits_per_qam_symbol,
     code_rate,
     cp_len,
+    min_speed,
+    max_speed,
+    delay_spread,
     device,
 ):
     source = BinarySource(precision="single", device=device)
@@ -137,10 +140,10 @@ def build_ofdm_system(
 
     channel_model = TDL(
         model="A",
-        delay_spread=300e-9,
+        delay_spread=delay_spread,
         carrier_frequency=3.5e9,
-        min_speed=10.0,
-        max_speed=10.0,
+        min_speed=min_speed,
+        max_speed=max_speed,
         num_rx_ant=1,
         num_tx_ant=1,
         precision="single",
@@ -218,6 +221,9 @@ def main():
         "bits_per_qam_symbol": 4,
         "code_rate": 1 / 2,
         "cp_len": 16,
+        "min_speed": 0.0,
+        "max_speed": 30.0,
+        "delay_spread": 1000e-9,
         "snr_dbs": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
     }
 
@@ -228,6 +234,9 @@ def main():
     bits_per_qam_symbol = sim_config["bits_per_qam_symbol"]
     code_rate = sim_config["code_rate"]
     cp_len = sim_config["cp_len"]
+    min_speed = sim_config["min_speed"]
+    max_speed = sim_config["max_speed"]
+    delay_spread = sim_config["delay_spread"]
     snr_dbs = sim_config["snr_dbs"]
 
     ofdm_system = build_ofdm_system(
@@ -236,6 +245,9 @@ def main():
         bits_per_qam_symbol,
         code_rate,
         cp_len,
+        min_speed,
+        max_speed,
+        delay_spread,
         device,
     )
 

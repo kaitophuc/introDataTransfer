@@ -56,6 +56,11 @@ We already moved beyond a neural demapper only. The neural receiver now sees the
 4. Train across more realistic variation.
    Train across many SNRs, delay spreads, Doppler speeds, TDL/CDL channel models, pilot layouts, and eventually modulation/code-rate settings.
 
+   Delay spread stress test:
+   The current mobility-trained residual neural receiver was evaluated at delay_spread=1000e-9 without retraining.
+   It still outperformed the classical LS/LMMSE receiver from 8-16 dB, although BER/FER degraded compared with the 300 ns baseline.
+   This suggests the neural receiver has some robustness to stronger frequency selectivity, but future training should randomize delay_spread.
+
 5. Move from SISO to MIMO.
    Current system is one transmit antenna and one receive antenna. Frontier systems often use MIMO, MU-MIMO, or massive MIMO.
 
