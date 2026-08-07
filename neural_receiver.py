@@ -336,15 +336,33 @@ class OFDMNeuralReceiverTrainer:
 
         return ber, fer
 
+class ResidualBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+        )
+
+        self.activation = nn.ReLU()
+
+    def forward(self, x):
+        residual = x
+        correction = self.net(x)
+        return self.activation(residual + correction)
+
 class FullGridNeuralReceiver(nn.Module):
-    def __init__(self, input_channels=10, hidden_channels=64, bits_per_symbol=4):
+    def __init__(self, input_channels=10, hidden_channels=96, bits_per_symbol=4):
         super().__init__()
 
         self.net = nn.Sequential(
             nn.Conv2d(input_channels, hidden_channels, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
-            nn.ReLU(),
+            ResidualBlock(hidden_channels),
+            ResidualBlock(hidden_channels),
+            ResidualBlock(hidden_channels),
             nn.Conv2d(hidden_channels, bits_per_symbol, kernel_size=1),
         )
 

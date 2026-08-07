@@ -25,7 +25,7 @@ training_seed = 0
 evaluation_seeds = [1000, 1001, 1002]
 
 config.seed = training_seed
-should_train_model = False
+should_train_model = True
 checkpoint_path = "checkpoints/full_grid_receiver.pt"
 
 def build_comb_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
@@ -211,7 +211,7 @@ def main():
     device = config.device
 
     sim_config = {
-        "target_coded_bits": 1_000_000_000,
+        "target_coded_bits": 10_000_000,
         "batch_size": 1000,
         "num_subcarriers": 64,
         "num_ofdm_symbols": 14,
