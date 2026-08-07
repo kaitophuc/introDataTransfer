@@ -1,8 +1,8 @@
 DEFAULT_WORKFLOW_NOTE = "\n".join(
     [
         "Workflow: Sionna BinarySource -> LDPC encoder -> 16-QAM mapper -> ResourceGrid with scattered pilots -> OFDM modulator -> TDL-A channel + AWGN -> OFDM demodulator.",
-        "Neural path: full received grid -> CNN neural receiver -> LDPC decoder.",
-        "Classical path: LS channel estimate -> LMMSE equalizer -> APP demapper -> LDPC decoder.",
+        "Neural path: full received OFDM grid -> CNN full-grid neural receiver -> LDPC decoder.",
+        "Classical path: LS channel estimation -> LMMSE equalizer -> APP demapper -> LDPC decoder.",
     ]
 )
 
@@ -91,5 +91,42 @@ def plot_receiver_comparison(
     return output_path
 
 
+def plot_receiver_comparison_from_csv(
+    csv_path="results/neural_vs_classical_receiver.csv",
+    output_path="results/neural_vs_classical_receiver.png",
+    workflow_note=None,
+):
+    import csv
+
+    snr_dbs = []
+    neural_bers = []
+    classical_bers = []
+    neural_fers = []
+    classical_fers = []
+
+    with open(csv_path, newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            snr_dbs.append(float(row["snr_db"]))
+            neural_bers.append(float(row["neural_ber"]))
+            classical_bers.append(float(row["classical_ber"]))
+            neural_fers.append(float(row["neural_fer"]))
+            classical_fers.append(float(row["classical_fer"]))
+
+    return plot_receiver_comparison(
+        snr_dbs,
+        neural_bers,
+        classical_bers,
+        neural_fers,
+        classical_fers,
+        output_path=output_path,
+        workflow_note=workflow_note,
+    )
+
+
 def _floor_for_log_plot(values, plot_floor):
     return [max(float(value), plot_floor) for value in values]
+
+
+if __name__ == "__main__":
+    plot_receiver_comparison_from_csv()

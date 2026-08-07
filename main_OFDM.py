@@ -144,7 +144,7 @@ def build_ofdm_system(
         carrier_frequency=3.5e9,
         min_speed=min_speed,
         max_speed=max_speed,
-        num_rx_ant=1,
+        num_rx_ant=2,
         num_tx_ant=1,
         precision="single",
         device=device,
@@ -214,8 +214,8 @@ def main():
     device = config.device
 
     sim_config = {
-        "target_coded_bits": 10_000_000,
-        "batch_size": 1000,
+        "target_coded_bits": 1_000_000_000,
+        "batch_size": 100,
         "num_subcarriers": 64,
         "num_ofdm_symbols": 14,
         "bits_per_qam_symbol": 4,

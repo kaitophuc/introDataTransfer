@@ -30,7 +30,7 @@ class OFDMNeuralReceiverTrainer:
         self.num_info_bits_per_frame = system["num_info_bits_per_frame"]
 
         self.full_grid_receiver = FullGridNeuralReceiver(
-            input_channels=10,
+            input_channels=15,
             bits_per_symbol=bits_per_qam_symbol,
         ).to(device)
 
@@ -354,7 +354,7 @@ class ResidualBlock(nn.Module):
         return self.activation(residual + correction)
 
 class FullGridNeuralReceiver(nn.Module):
-    def __init__(self, input_channels=10, hidden_channels=96, bits_per_symbol=4):
+    def __init__(self, input_channels=15, hidden_channels=96, bits_per_symbol=4):
         super().__init__()
 
         self.net = nn.Sequential(
@@ -375,50 +375,73 @@ class FullGridNeuralReceiver(nn.Module):
         return data_llr
 
 def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_hat_sionna, err_var,):
-    y_grid = y_grid_sionna.squeeze(1).squeeze(1)
+    y_grid = y_grid_sionna.squeeze(1)
 
-    h_hat_grid = h_hat_sionna.squeeze(1).squeeze(1).squeeze(1).squeeze(1)
-    err_var_grid = err_var.squeeze(1).squeeze(1).squeeze(1).squeeze(1)
+    h_hat_grid = h_hat_sionna[:, 0, :, 0, 0, :, :]
+    err_var_grid = err_var[:, 0, :, 0, 0, :, :]
 
     real_feature = torch.real(y_grid)
     imag_feature = torch.imag(y_grid)
-
-    noise_feature = torch.full_like(
-        real_feature,
-        torch.log(noise_power_tensor),
+    received_features = torch.cat(
+        [
+            real_feature,
+            imag_feature,
+        ],
+        dim=1,
     )
 
     device = y_grid.device
     batch_frames = y_grid.shape[0]
+    num_ofdm_symbols = y_grid.shape[2]
+    num_subcarriers = y_grid.shape[3]    
+    
+    noise_feature = torch.full(
+        (batch_frames, 1, num_ofdm_symbols, num_subcarriers),
+        torch.log(noise_power_tensor).item(),
+        dtype=torch.float32,
+        device=device,
+    )
 
     pilot_mask = pilot_mask.to(device=device, dtype=torch.float32)
-    pilot_feature = pilot_mask.unsqueeze(0).expand(
+    pilot_feature = pilot_mask.view(1, 1, num_ofdm_symbols, num_subcarriers).expand(
         batch_frames,
+        -1,
         -1,
         -1,
     )
 
     data_mask = (~pilot_mask.bool()).to(torch.float32)
-    data_feature = data_mask.unsqueeze(0).expand(
+    data_feature = data_mask.view(1, 1, num_ofdm_symbols, num_subcarriers).expand(
         batch_frames,
+        -1,
         -1,
         -1,
     )
 
-    time_index = torch.linspace(-1.0, 1.0, y_grid.shape[1], device=device)
-    freq_index = torch.linspace(-1.0, 1.0, y_grid.shape[2], device=device)
+    time_index = torch.linspace(-1.0, 1.0, num_ofdm_symbols, device=device)
+    freq_index = torch.linspace(-1.0, 1.0, num_subcarriers, device=device)
 
-    time_feature = time_index.view(1, -1, 1).expand(batch_frames, -1, y_grid.shape[2])
-    freq_feature = freq_index.view(1, 1, -1).expand(batch_frames, y_grid.shape[1], -1)
+    time_feature = time_index.view(1, 1, num_ofdm_symbols, 1).expand(
+        batch_frames,
+        -1,
+        -1,
+        num_subcarriers,
+    )
+
+    freq_feature = freq_index.view(1, 1, 1, num_subcarriers).expand(
+        batch_frames,
+        -1,
+        num_ofdm_symbols,
+        -1,
+    )
 
     h_hat_real_feature = torch.real(h_hat_grid)
     h_hat_imag_feature = torch.imag(h_hat_grid)
     err_var_feature = torch.log(err_var_grid + 1e-12)
 
-    grid_features = torch.stack(
+    grid_features = torch.cat(
         [
-            real_feature,
-            imag_feature,
+            received_features,
             noise_feature,
             pilot_feature,
             data_feature,
