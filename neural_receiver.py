@@ -34,7 +34,7 @@ class OFDMNeuralReceiverTrainer:
         self.num_total_data_symbols = self.num_spatial_streams * self.num_data_symbols_per_stream
 
         self.full_grid_receiver = FullGridNeuralReceiver(
-            input_channels=23,
+            input_channels=27,
             bits_per_symbol=self.num_spatial_streams * bits_per_qam_symbol,
         ).to(device)
 
@@ -109,6 +109,8 @@ class OFDMNeuralReceiverTrainer:
 
         pilot_mask = self.rg.pilot_pattern.mask
 
+        pilot_values = self.rg.pilot_pattern.pilots
+
         h_hat_sionna, err_var = self.ls_estimator(
             y_grid_sionna,
             noise_power_tensor,
@@ -118,6 +120,7 @@ class OFDMNeuralReceiverTrainer:
             y_grid_sionna,
             noise_power_tensor,
             pilot_mask,
+            pilot_values,
             h_hat_sionna,
             err_var,
             self.rg.num_tx,
@@ -212,6 +215,7 @@ class OFDMNeuralReceiverTrainer:
         )
 
         pilot_mask = self.rg.pilot_pattern.mask
+        pilot_values = self.rg.pilot_pattern.pilots
 
         h_hat_sionna, err_var = self.ls_estimator(
             y_grid_sionna,
@@ -222,6 +226,7 @@ class OFDMNeuralReceiverTrainer:
             y_grid_sionna,
             noise_power_tensor,
             pilot_mask,
+            pilot_values,
             h_hat_sionna,
             err_var,
             self.rg.num_tx,
@@ -359,12 +364,15 @@ class ResidualBlock(nn.Module):
         return self.activation(residual + correction)
 
 class FullGridNeuralReceiver(nn.Module):
-    def __init__(self, input_channels=23, hidden_channels=96, bits_per_symbol=4):
+    def __init__(self, input_channels=27, hidden_channels=96, bits_per_symbol=4):
         super().__init__()
 
         self.net = nn.Sequential(
             nn.Conv2d(input_channels, hidden_channels, kernel_size=3, padding=1),
             nn.ReLU(),
+            ResidualBlock(hidden_channels),
+            ResidualBlock(hidden_channels),
+            ResidualBlock(hidden_channels),
             ResidualBlock(hidden_channels),
             ResidualBlock(hidden_channels),
             ResidualBlock(hidden_channels),
@@ -394,7 +402,7 @@ class FullGridNeuralReceiver(nn.Module):
 
         return data_llr
 
-def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_hat_sionna, err_var, num_tx, num_streams_per_tx):
+def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, pilot_values, h_hat_sionna, err_var, num_tx, num_streams_per_tx):
     batch_frames = y_grid_sionna.shape[0]
     num_rx = y_grid_sionna.shape[1]
     num_rx_ant = y_grid_sionna.shape[2]
@@ -451,6 +459,37 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_h
 
     data_mask = ~pilot_mask
 
+    pilot_values = pilot_values.to(device=device).reshape(
+        num_stream_masks,
+        -1,
+    )
+
+    pilot_value_grid = torch.zeros(
+        (
+            num_stream_masks,
+            num_ofdm_symbols,
+            num_subcarriers,
+        ),
+        dtype=pilot_values.dtype,
+        device=device,
+    )
+
+    pilot_value_grid[pilot_mask] = pilot_values.reshape(-1)
+
+    pilot_value_real_feature = torch.real(pilot_value_grid).unsqueeze(0).expand(
+        batch_frames,
+        -1,
+        -1,
+        -1,
+    )
+
+    pilot_value_imag_feature = torch.imag(pilot_value_grid).unsqueeze(0).expand(
+        batch_frames,
+        -1,
+        -1,
+        -1,
+    )
+
     pilot_feature = pilot_mask.to(torch.float32).unsqueeze(0).expand(
         batch_frames,
         -1,
@@ -492,6 +531,8 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_h
             noise_feature,
             pilot_feature,
             data_feature,
+            pilot_value_real_feature,
+            pilot_value_imag_feature,
             time_feature,
             freq_feature,
             h_hat_real_feature,
