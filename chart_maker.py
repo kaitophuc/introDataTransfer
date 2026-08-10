@@ -1,8 +1,10 @@
 DEFAULT_WORKFLOW_NOTE = "\n".join(
     [
-        "Workflow: Sionna BinarySource -> LDPC encoder -> 16-QAM mapper -> ResourceGrid with scattered pilots -> OFDM modulator -> TDL-A channel + AWGN -> OFDM demodulator.",
-        "Neural path: full received OFDM grid -> CNN full-grid neural receiver -> LDPC decoder.",
-        "Classical path: LS channel estimation -> LMMSE equalizer -> APP demapper -> LDPC decoder.",
+        "Workflow: Sionna BinarySource -> 5G LDPC encoder -> 16-QAM mapper -> 2-stream 2x2 MIMO ResourceGrid.",
+        "Pilot/channel: interleaved pilots in OFDM symbols 2 and 11 -> OFDM modulator -> TDL-A time channel -> AWGN -> OFDM demodulator.",
+        "Neural features: received grid + log noise power + pilot/data masks + time/frequency coordinates + LS channel estimates/error variances.",
+        "Neural path: full-grid residual CNN -> coded-bit LLRs for both spatial streams -> LDPC decoder.",
+        "Classical path: received grid + noise power -> LS channel estimator (linear interpolation) -> LMMSE equalizer -> APP demapper -> LDPC decoder.",
     ]
 )
 

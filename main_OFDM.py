@@ -25,26 +25,37 @@ training_seed = 0
 evaluation_seeds = [1000, 1001, 1002]
 
 config.seed = training_seed
-should_train_model = False
+should_train_model = True
 checkpoint_path = "checkpoints/full_grid_receiver.pt"
 
-def build_comb_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, device):
+def build_comb_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, num_tx, num_streams_per_tx, device):
     pilot_mask = torch.zeros(
-        (1, 1, num_ofdm_symbols, num_subcarriers),
+        (num_tx, num_streams_per_tx, num_ofdm_symbols, num_subcarriers),
         dtype=torch.bool,
         device=device,
     )
 
-    pilot_mask[:, :, 0::4, 0::4] = True
-    pilot_mask[:, :, 2::4, 2::4] = True
+    pilot_mask[:, :, [2, 11], :] = True
 
-    num_pilot_res = int(torch.sum(pilot_mask).item())
+    num_pilot_res_per_stream = int(torch.sum(pilot_mask[0, 0]).item())
 
-    pilot_symbols = torch.ones(
-        (1, 1, num_pilot_res),
+    pilot_symbols = torch.zeros(
+        (num_tx, num_streams_per_tx, num_pilot_res_per_stream),
         dtype=torch.complex64,
         device=device,
     )
+
+    num_spatial_streams = num_tx * num_streams_per_tx
+
+    for tx_index in range(num_tx):
+        for stream_index in range(num_streams_per_tx):
+            spatial_stream_index = tx_index * num_streams_per_tx + stream_index
+
+            pilot_symbols[
+                tx_index,
+                stream_index,
+                spatial_stream_index::num_spatial_streams,
+            ] = 1.0 + 0.0j
 
     return PilotPattern(
         pilot_mask,
@@ -62,6 +73,10 @@ def build_ofdm_system(
     min_speed,
     max_speed,
     delay_spread,
+    num_tx,
+    num_streams_per_tx,
+    num_rx_ant,
+    num_tx_ant,
     device,
 ):
     source = BinarySource(precision="single", device=device)
@@ -87,6 +102,8 @@ def build_ofdm_system(
     pilot_pattern = build_comb_scattered_pilot_pattern(
         num_ofdm_symbols,
         num_subcarriers,
+        num_tx,
+        num_streams_per_tx,
         device,
     )
 
@@ -94,8 +111,8 @@ def build_ofdm_system(
         num_ofdm_symbols=num_ofdm_symbols,
         fft_size=num_subcarriers,
         subcarrier_spacing=15e3,
-        num_tx=1,
-        num_streams_per_tx=1,
+        num_tx=num_tx,
+        num_streams_per_tx=num_streams_per_tx,
         cyclic_prefix_length=cp_len,
         dc_null=False,
         pilot_pattern=pilot_pattern,
@@ -106,7 +123,7 @@ def build_ofdm_system(
     num_data_qam_symbols_per_frame = rg.num_data_symbols
 
     num_coded_bits_per_frame = (
-        num_data_qam_symbols_per_frame * bits_per_qam_symbol
+        num_tx * num_streams_per_tx * num_data_qam_symbols_per_frame * bits_per_qam_symbol
     )
 
     num_info_bits_per_frame = int(num_coded_bits_per_frame * code_rate)
@@ -128,7 +145,7 @@ def build_ofdm_system(
 
     stream_management = StreamManagement(
         rx_tx_association,
-        num_streams_per_tx=1,
+        num_streams_per_tx=num_streams_per_tx,
     )
 
     lmmse_equalizer = LMMSEEqualizer(
@@ -144,8 +161,8 @@ def build_ofdm_system(
         carrier_frequency=3.5e9,
         min_speed=min_speed,
         max_speed=max_speed,
-        num_rx_ant=2,
-        num_tx_ant=1,
+        num_rx_ant=num_rx_ant,
+        num_tx_ant=num_tx_ant,
         precision="single",
         device=device,
     )
@@ -214,7 +231,7 @@ def main():
     device = config.device
 
     sim_config = {
-        "target_coded_bits": 1_000_000_000,
+        "target_coded_bits": 10_000_000,
         "batch_size": 100,
         "num_subcarriers": 64,
         "num_ofdm_symbols": 14,
@@ -224,6 +241,10 @@ def main():
         "min_speed": 0.0,
         "max_speed": 30.0,
         "delay_spread": 1000e-9,
+        "num_tx": 1,
+        "num_streams_per_tx": 2,
+        "num_rx_ant": 2,
+        "num_tx_ant": 2,
         "snr_dbs": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
     }
 
@@ -237,6 +258,10 @@ def main():
     min_speed = sim_config["min_speed"]
     max_speed = sim_config["max_speed"]
     delay_spread = sim_config["delay_spread"]
+    num_tx = sim_config["num_tx"]
+    num_streams_per_tx = sim_config["num_streams_per_tx"]
+    num_rx_ant = sim_config["num_rx_ant"]
+    num_tx_ant = sim_config["num_tx_ant"]
     snr_dbs = sim_config["snr_dbs"]
 
     ofdm_system = build_ofdm_system(
@@ -248,6 +273,10 @@ def main():
         min_speed,
         max_speed,
         delay_spread,
+        num_tx,
+        num_streams_per_tx,
+        num_rx_ant,
+        num_tx_ant,
         device,
     )
 
@@ -264,11 +293,11 @@ def main():
     if should_train_model:
 
         trainer.train(
-            num_training_steps=2000,
+            num_training_steps=10000,
             batch_size=batch_size,
             training_snr_db_min=6.0,
-            training_snr_db_max=16.0,
-            print_every=100,
+            training_snr_db_max=22.0,
+            print_every=500,
         )
 
         torch.save(

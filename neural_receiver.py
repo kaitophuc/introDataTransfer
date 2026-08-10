@@ -29,9 +29,13 @@ class OFDMNeuralReceiverTrainer:
         self.num_coded_bits_per_frame = system["num_coded_bits_per_frame"]
         self.num_info_bits_per_frame = system["num_info_bits_per_frame"]
 
+        self.num_spatial_streams = self.rg.num_tx * self.rg.num_streams_per_tx
+        self.num_data_symbols_per_stream = self.rg.num_data_symbols
+        self.num_total_data_symbols = self.num_spatial_streams * self.num_data_symbols_per_stream
+
         self.full_grid_receiver = FullGridNeuralReceiver(
-            input_channels=15,
-            bits_per_symbol=bits_per_qam_symbol,
+            input_channels=23,
+            bits_per_symbol=self.num_spatial_streams * bits_per_qam_symbol,
         ).to(device)
 
         self.full_grid_loss_function = torch.nn.BCEWithLogitsLoss()
@@ -56,21 +60,14 @@ class OFDMNeuralReceiverTrainer:
         coded_bits_flat = self.ldpc_encoder(info_bits)
 
         coded_bits = coded_bits_flat.reshape(
-            batch_frames,
+            batch_frames, self.rg.num_tx, self.rg.num_streams_per_tx,
             self.rg.num_data_symbols,
             self.bits_per_qam_symbol,
         )
 
         x_freq = self.mapper(coded_bits).squeeze(-1)
 
-        x_freq_sionna_input = x_freq.reshape(
-            batch_frames,
-            1,
-            1,
-            self.rg.num_data_symbols,
-        )
-
-        x_grid_sionna = self.rg_mapper(x_freq_sionna_input)
+        x_grid_sionna = self.rg_mapper(x_freq)
 
         x_time_sionna = self.ofdm_modulator(x_grid_sionna)
 
@@ -101,7 +98,7 @@ class OFDMNeuralReceiverTrainer:
 
         equalized_data_freq = x_hat_sionna.reshape(
             batch_frames,
-            self.rg.num_data_symbols,
+            self.num_total_data_symbols,
         )
         return info_bits, coded_bits, equalized_data_freq, no_eff
 
@@ -110,7 +107,7 @@ class OFDMNeuralReceiverTrainer:
             self.generate_received_grid_batch(batch_frames, noise_power)
         )
 
-        pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
+        pilot_mask = self.rg.pilot_pattern.mask
 
         h_hat_sionna, err_var = self.ls_estimator(
             y_grid_sionna,
@@ -123,9 +120,15 @@ class OFDMNeuralReceiverTrainer:
             pilot_mask,
             h_hat_sionna,
             err_var,
+            self.rg.num_tx,
+            self.rg.num_streams_per_tx,
         )
 
-        labels = coded_bits.float()
+        labels = coded_bits.reshape(
+            batch_frames,
+            self.num_total_data_symbols,
+            self.bits_per_qam_symbol,
+        ).float()
 
         return grid_features, data_mask, labels
 
@@ -208,7 +211,7 @@ class OFDMNeuralReceiverTrainer:
             self.generate_received_grid_batch(batch_frames, noise_power)
         )
 
-        pilot_mask = self.rg.pilot_pattern.mask.squeeze(0).squeeze(0)
+        pilot_mask = self.rg.pilot_pattern.mask
 
         h_hat_sionna, err_var = self.ls_estimator(
             y_grid_sionna,
@@ -221,6 +224,8 @@ class OFDMNeuralReceiverTrainer:
             pilot_mask,
             h_hat_sionna,
             err_var,
+            self.rg.num_tx,
+            self.rg.num_streams_per_tx,
         )
 
         self.full_grid_receiver.eval()
@@ -285,7 +290,7 @@ class OFDMNeuralReceiverTrainer:
 
         llr = self.demapper(
             equalized_data_freq.unsqueeze(-1),
-            no_eff.reshape(batch_frames, self.rg.num_data_symbols).unsqueeze(-1)
+            no_eff.reshape(batch_frames, self.num_total_data_symbols).unsqueeze(-1)
         )
 
         llr_flat = llr.reshape(
@@ -354,7 +359,7 @@ class ResidualBlock(nn.Module):
         return self.activation(residual + correction)
 
 class FullGridNeuralReceiver(nn.Module):
-    def __init__(self, input_channels=15, hidden_channels=96, bits_per_symbol=4):
+    def __init__(self, input_channels=23, hidden_channels=96, bits_per_symbol=4):
         super().__init__()
 
         self.net = nn.Sequential(
@@ -369,16 +374,54 @@ class FullGridNeuralReceiver(nn.Module):
     def forward(self, grid_features, data_mask):
         grid_llr = self.net(grid_features)
 
-        data_positions = data_mask.bool()
-        data_llr = grid_llr.permute(0, 2, 3, 1)[:, data_positions, :]
+        batch_frames = grid_llr.shape[0]
+        num_streams = data_mask.shape[0]
+        num_ofdm_symbols = data_mask.shape[1]
+        num_subcarriers = data_mask.shape[2]
+        bits_per_symbol = grid_llr.shape[1] // num_streams
+
+        grid_llr = grid_llr.reshape(
+            batch_frames,
+            num_streams,
+            bits_per_symbol,
+            num_ofdm_symbols,
+            num_subcarriers,
+        )
+
+        grid_llr = grid_llr.permute(0, 1, 3, 4, 2)
+
+        data_llr = grid_llr[:, data_mask.bool(), :]
 
         return data_llr
 
-def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_hat_sionna, err_var,):
-    y_grid = y_grid_sionna.squeeze(1)
+def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_hat_sionna, err_var, num_tx, num_streams_per_tx):
+    batch_frames = y_grid_sionna.shape[0]
+    num_rx = y_grid_sionna.shape[1]
+    num_rx_ant = y_grid_sionna.shape[2]
+    num_ofdm_symbols = y_grid_sionna.shape[3]
+    num_subcarriers = y_grid_sionna.shape[4]
+    num_stream_masks = num_tx * num_streams_per_tx
 
-    h_hat_grid = h_hat_sionna[:, 0, :, 0, 0, :, :]
-    err_var_grid = err_var[:, 0, :, 0, 0, :, :]
+    y_grid = y_grid_sionna.reshape(
+        batch_frames,
+        num_rx * num_rx_ant,
+        num_ofdm_symbols,
+        num_subcarriers,
+    )
+
+    h_hat_grid = h_hat_sionna.reshape(
+        batch_frames,
+        num_rx * num_rx_ant * num_stream_masks,
+        num_ofdm_symbols,
+        num_subcarriers,
+    )
+
+    err_var_grid = err_var.reshape(
+        batch_frames,
+        num_rx * num_rx_ant * num_stream_masks,
+        num_ofdm_symbols,
+        num_subcarriers,
+    )
 
     real_feature = torch.real(y_grid)
     imag_feature = torch.imag(y_grid)
@@ -390,10 +433,7 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_h
         dim=1,
     )
 
-    device = y_grid.device
-    batch_frames = y_grid.shape[0]
-    num_ofdm_symbols = y_grid.shape[2]
-    num_subcarriers = y_grid.shape[3]    
+    device = y_grid.device 
     
     noise_feature = torch.full(
         (batch_frames, 1, num_ofdm_symbols, num_subcarriers),
@@ -402,16 +442,23 @@ def make_neural_grid_features(y_grid_sionna, noise_power_tensor, pilot_mask, h_h
         device=device,
     )
 
-    pilot_mask = pilot_mask.to(device=device, dtype=torch.float32)
-    pilot_feature = pilot_mask.view(1, 1, num_ofdm_symbols, num_subcarriers).expand(
+    pilot_mask = pilot_mask.to(device=device, dtype=torch.bool)
+    pilot_mask = pilot_mask.reshape(
+        num_stream_masks,
+        num_ofdm_symbols,
+        num_subcarriers
+    )
+
+    data_mask = ~pilot_mask
+
+    pilot_feature = pilot_mask.to(torch.float32).unsqueeze(0).expand(
         batch_frames,
         -1,
         -1,
         -1,
     )
 
-    data_mask = (~pilot_mask.bool()).to(torch.float32)
-    data_feature = data_mask.view(1, 1, num_ofdm_symbols, num_subcarriers).expand(
+    data_feature = data_mask.to(torch.float32).unsqueeze(0).expand(
         batch_frames,
         -1,
         -1,
