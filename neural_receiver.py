@@ -347,13 +347,13 @@ class OFDMNeuralReceiverTrainer:
         return ber, fer
 
 class ResidualBlock(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, channels, dilation=1):
         super().__init__()
 
         self.net = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=dilation, dilation=dilation),
             nn.ReLU(),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=dilation, dilation=dilation),
         )
 
         self.activation = nn.ReLU()
@@ -370,12 +370,12 @@ class FullGridNeuralReceiver(nn.Module):
         self.net = nn.Sequential(
             nn.Conv2d(input_channels, hidden_channels, kernel_size=3, padding=1),
             nn.ReLU(),
-            ResidualBlock(hidden_channels),
-            ResidualBlock(hidden_channels),
-            ResidualBlock(hidden_channels),
-            ResidualBlock(hidden_channels),
-            ResidualBlock(hidden_channels),
-            ResidualBlock(hidden_channels),
+            ResidualBlock(hidden_channels, dilation=(1, 1)),
+            ResidualBlock(hidden_channels, dilation=(1, 2)),
+            ResidualBlock(hidden_channels, dilation=(1, 4)),
+            ResidualBlock(hidden_channels, dilation=(1, 4)),
+            ResidualBlock(hidden_channels, dilation=(1, 2)),
+            ResidualBlock(hidden_channels, dilation=(1, 1)),
             nn.Conv2d(hidden_channels, bits_per_symbol, kernel_size=1),
         )
 
@@ -392,6 +392,159 @@ class FullGridNeuralReceiver(nn.Module):
             batch_frames,
             num_streams,
             bits_per_symbol,
+            num_ofdm_symbols,
+            num_subcarriers,
+        )
+
+        grid_llr = grid_llr.permute(0, 1, 3, 4, 2)
+
+        data_llr = grid_llr[:, data_mask.bool(), :]
+
+        return data_llr
+
+class UNetConvBlock(nn.Module):
+    def __init__(self, input_channels, output_channels):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Conv2d(
+                input_channels,
+                output_channels,
+                kernel_size=3,
+                padding=1,
+            ),
+            nn.ReLU(),
+            nn.Conv2d(
+                output_channels,
+                output_channels,
+                kernel_size=3,
+                padding=1,
+            ),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+class UNetFullGridNeuralReceiver(nn.Module):
+    def __init__(
+        self,
+        input_channels=27,
+        base_channels=64,
+        bits_per_symbol=4,
+    ):
+        super().__init__()
+
+        self.encoder1 = UNetConvBlock(
+            input_channels,
+            base_channels,
+        )
+
+        self.downsample1 = nn.Sequential(
+            nn.Conv2d(
+                base_channels,
+                base_channels * 2,
+                kernel_size=(1,4),
+                stride=(1, 2),
+                padding=(0, 1),
+            ),
+            nn.ReLU(),
+        )
+
+        self.encoder2 = UNetConvBlock(
+            base_channels * 2,
+            base_channels * 2,
+        )
+
+        self.downsample2 = nn.Sequential(
+            nn.Conv2d(
+                base_channels * 2,
+                base_channels * 4,
+                kernel_size=(1, 4),
+                stride=(1, 2),
+                padding=(0, 1),
+            ),
+            nn.ReLU(),
+        )
+
+        self.bottleneck = UNetConvBlock(
+            base_channels * 4,
+            base_channels * 4,
+        )
+
+        self.upsample2 = nn.Sequential(
+            nn.ConvTranspose2d(
+                base_channels * 4,
+                base_channels * 2,
+                kernel_size=(1, 4),
+                stride=(1, 2),
+                padding=(0, 1),
+            ),
+            nn.ReLU(),
+        )
+
+        self.decoder2 = UNetConvBlock(
+            base_channels * 4,
+            base_channels * 2,
+        )
+
+        self.upsample1 = nn.Sequential(
+            nn.ConvTranspose2d(
+                base_channels * 2,
+                base_channels,
+                kernel_size=(1, 4),
+                stride=(1, 2),
+                padding=(0, 1),
+            ),
+            nn.ReLU(),
+        )
+
+        self.decoder1 = UNetConvBlock(
+            base_channels * 2,
+            base_channels,
+        )
+
+        self.output_layer = nn.Conv2d(
+            base_channels,
+            bits_per_symbol,
+            kernel_size=1,
+        )
+
+    def forward(self, grid_features, data_mask):
+        encoder1_output = self.encoder1(grid_features)
+
+        encoder2_input = self.downsample1(encoder1_output)
+        encoder2_output = self.encoder2(encoder2_input)
+
+        bottleneck_input = self.downsample2(encoder2_output)
+        bottleneck_output = self.bottleneck(bottleneck_input)
+
+        decoder2_input = self.upsample2(bottleneck_output)
+        decoder2_input = torch.cat(
+            [decoder2_input, encoder2_output],
+            dim=1,
+        )
+        decoder2_output = self.decoder2(decoder2_input)
+
+        decoder1_input = self.upsample1(decoder2_output)
+        decoder1_input = torch.cat(
+            [decoder1_input, encoder1_output],
+            dim=1,
+        )
+        decoder1_output = self.decoder1(decoder1_input)
+
+        grid_llr = self.output_layer(decoder1_output)
+
+        batch_frames = grid_llr.shape[0]
+        num_streams = data_mask.shape[0]
+        num_ofdm_symbols = data_mask.shape[1]
+        num_subcarriers = data_mask.shape[2]
+        bits_per_symbol_per_stream = grid_llr.shape[1] // num_streams
+
+        grid_llr = grid_llr.reshape(
+            batch_frames,
+            num_streams,
+            bits_per_symbol_per_stream,
             num_ofdm_symbols,
             num_subcarriers,
         )
