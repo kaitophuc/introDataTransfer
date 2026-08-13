@@ -1,0 +1,57 @@
+device: cuda:0
+loading frozen checkpoint: /home/phuc/Work/SummerResearch2026/introDataTransfer/checkpoints/full_grid_receiver.pt
+checkpoint SHA-256: a91274ffec93f9b81734a3e39125edd3579c6bd7ceed4c7287fd81f0dd350dba
+training: disabled
+sweep mode: full; environments: 45; expected result rows: 2970
+resuming 2970 completed rows; 0 rows remain
+[resume] environment 1/45 already complete: tdl_a_delay_100ns_speed_0mps
+[resume] environment 2/45 already complete: tdl_a_delay_100ns_speed_10mps
+[resume] environment 3/45 already complete: tdl_a_delay_100ns_speed_30mps
+[resume] environment 4/45 already complete: tdl_a_delay_300ns_speed_0mps
+[resume] environment 5/45 already complete: tdl_a_delay_300ns_speed_10mps
+[resume] environment 6/45 already complete: tdl_a_delay_300ns_speed_30mps
+[resume] environment 7/45 already complete: tdl_a_delay_1000ns_speed_0mps
+[resume] environment 8/45 already complete: tdl_a_delay_1000ns_speed_10mps
+[resume] environment 9/45 already complete: tdl_a_delay_1000ns_speed_30mps
+[resume] environment 10/45 already complete: tdl_b_delay_100ns_speed_0mps
+[resume] environment 11/45 already complete: tdl_b_delay_100ns_speed_10mps
+[resume] environment 12/45 already complete: tdl_b_delay_100ns_speed_30mps
+[resume] environment 13/45 already complete: tdl_b_delay_300ns_speed_0mps
+[resume] environment 14/45 already complete: tdl_b_delay_300ns_speed_10mps
+[resume] environment 15/45 already complete: tdl_b_delay_300ns_speed_30mps
+[resume] environment 16/45 already complete: tdl_b_delay_1000ns_speed_0mps
+[resume] environment 17/45 already complete: tdl_b_delay_1000ns_speed_10mps
+[resume] environment 18/45 already complete: tdl_b_delay_1000ns_speed_30mps
+[resume] environment 19/45 already complete: tdl_c_delay_100ns_speed_0mps
+[resume] environment 20/45 already complete: tdl_c_delay_100ns_speed_10mps
+[resume] environment 21/45 already complete: tdl_c_delay_100ns_speed_30mps
+[resume] environment 22/45 already complete: tdl_c_delay_300ns_speed_0mps
+[resume] environment 23/45 already complete: tdl_c_delay_300ns_speed_10mps
+[resume] environment 24/45 already complete: tdl_c_delay_300ns_speed_30mps
+[resume] environment 25/45 already complete: tdl_c_delay_1000ns_speed_0mps
+[resume] environment 26/45 already complete: tdl_c_delay_1000ns_speed_10mps
+[resume] environment 27/45 already complete: tdl_c_delay_1000ns_speed_30mps
+[resume] environment 28/45 already complete: tdl_d_delay_100ns_speed_0mps
+[resume] environment 29/45 already complete: tdl_d_delay_100ns_speed_10mps
+[resume] environment 30/45 already complete: tdl_d_delay_100ns_speed_30mps
+[resume] environment 31/45 already complete: tdl_d_delay_300ns_speed_0mps
+[resume] environment 32/45 already complete: tdl_d_delay_300ns_speed_10mps
+[resume] environment 33/45 already complete: tdl_d_delay_300ns_speed_30mps
+[resume] environment 34/45 already complete: tdl_d_delay_1000ns_speed_0mps
+[resume] environment 35/45 already complete: tdl_d_delay_1000ns_speed_10mps
+[resume] environment 36/45 already complete: tdl_d_delay_1000ns_speed_30mps
+[resume] environment 37/45 already complete: tdl_e_delay_100ns_speed_0mps
+[resume] environment 38/45 already complete: tdl_e_delay_100ns_speed_10mps
+[resume] environment 39/45 already complete: tdl_e_delay_100ns_speed_30mps
+[resume] environment 40/45 already complete: tdl_e_delay_300ns_speed_0mps
+[resume] environment 41/45 already complete: tdl_e_delay_300ns_speed_10mps
+[resume] environment 42/45 already complete: tdl_e_delay_300ns_speed_30mps
+[resume] environment 43/45 already complete: tdl_e_delay_1000ns_speed_0mps
+[resume] environment 44/45 already complete: tdl_e_delay_1000ns_speed_10mps
+[resume] environment 45/45 already complete: tdl_e_delay_1000ns_speed_30mps
+saved raw per-seed results: /home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test/stress_test_raw.csv
+saved aggregated results: /home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test/stress_test_summary.csv
+saved delay-spread chart: /home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test/delay_spread_comparison.png
+saved mobility chart: /home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test/mobility_comparison.png
+saved channel-model chart: /home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test/channel_model_comparison.png
+saved run manifest: /home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test/stress_test_manifest.json

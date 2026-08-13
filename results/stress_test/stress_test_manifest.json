@@ -1,0 +1,635 @@
+{
+  "channel_window_limitation": {
+    "cyclic_prefix_samples": 16,
+    "maximum_delay_spread_seconds": 3e-06,
+    "note": "Matches the current project setup. At large RMS delay spreads, late energy in some TDL profiles may be truncated."
+  },
+  "checkpoint": {
+    "path": "/home/phuc/Work/SummerResearch2026/introDataTransfer/checkpoints/full_grid_receiver.pt",
+    "sha256": "a91274ffec93f9b81734a3e39125edd3579c6bd7ceed4c7287fd81f0dd350dba",
+    "size_bytes": 4093701
+  },
+  "complete": true,
+  "completed_at_utc": "2026-08-13T13:51:55.622606+00:00",
+  "completed_rows": 2970,
+  "created_at_utc": "2026-08-13T05:32:13.374296+00:00",
+  "environment_count": 45,
+  "environment_matrix": [
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_a_delay_100ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_a_delay_100ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "delay_spread"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_a_delay_100ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_a_delay_300ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "mobility"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_a_delay_300ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "delay_spread;mobility;channel_model"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_a_delay_300ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "mobility"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_a_delay_1000ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_a_delay_1000ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "delay_spread"
+    },
+    {
+      "channel_model": "A",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_a_delay_1000ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_b_delay_100ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_b_delay_100ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_b_delay_100ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_b_delay_300ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_b_delay_300ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "channel_model"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_b_delay_300ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_b_delay_1000ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_b_delay_1000ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "B",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_b_delay_1000ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_c_delay_100ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_c_delay_100ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_c_delay_100ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_c_delay_300ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_c_delay_300ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "channel_model"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_c_delay_300ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_c_delay_1000ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_c_delay_1000ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "C",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_c_delay_1000ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_d_delay_100ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_d_delay_100ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_d_delay_100ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_d_delay_300ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_d_delay_300ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "channel_model"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_d_delay_300ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_d_delay_1000ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_d_delay_1000ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "D",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_d_delay_1000ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_e_delay_100ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_e_delay_100ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 100.0,
+      "environment_id": "tdl_e_delay_100ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_e_delay_300ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_e_delay_300ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "channel_model"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 300.0,
+      "environment_id": "tdl_e_delay_300ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_e_delay_1000ns_speed_0mps",
+      "speed_mps": 0.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_e_delay_1000ns_speed_10mps",
+      "speed_mps": 10.0,
+      "sweep_tags": "full_grid_only"
+    },
+    {
+      "channel_model": "E",
+      "delay_spread_ns": 1000.0,
+      "environment_id": "tdl_e_delay_1000ns_speed_30mps",
+      "speed_mps": 30.0,
+      "sweep_tags": "full_grid_only"
+    }
+  ],
+  "expected_rows": 2970,
+  "last_started_at_utc": "2026-08-13T13:51:54.235196+00:00",
+  "outputs": {
+    "channel_model_chart": "channel_model_comparison.png",
+    "delay_chart": "delay_spread_comparison.png",
+    "directory": "/home/phuc/Work/SummerResearch2026/introDataTransfer/results/stress_test",
+    "mobility_chart": "mobility_comparison.png",
+    "raw_csv": "stress_test_raw.csv",
+    "summary_csv": "stress_test_summary.csv"
+  },
+  "run_signature": {
+    "batch_size": 100,
+    "channel_models": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "channel_window_seconds": 3e-06,
+    "checkpoint_path": "/home/phuc/Work/SummerResearch2026/introDataTransfer/checkpoints/full_grid_receiver.pt",
+    "checkpoint_sha256": "a91274ffec93f9b81734a3e39125edd3579c6bd7ceed4c7287fd81f0dd350dba",
+    "delay_spreads_ns": [
+      100.0,
+      300.0,
+      1000.0
+    ],
+    "environments": [
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "A",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "B",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "C",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "D",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 100.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 300.0,
+        "speed_mps": 30.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 0.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 10.0
+      },
+      {
+        "channel_model": "E",
+        "delay_spread_ns": 1000.0,
+        "speed_mps": 30.0
+      }
+    ],
+    "evaluation_seeds": [
+      1000,
+      1001,
+      1002
+    ],
+    "ofdm_system": {
+      "bits_per_qam_symbol": 4,
+      "code_rate": 0.5,
+      "cp_len": 16,
+      "num_ofdm_symbols": 14,
+      "num_rx_ant": 2,
+      "num_streams_per_tx": 2,
+      "num_subcarriers": 64,
+      "num_tx": 1,
+      "num_tx_ant": 2
+    },
+    "quick": false,
+    "reference_environment": {
+      "channel_model": "A",
+      "delay_spread_ns": 300.0,
+      "speed_mps": 10.0
+    },
+    "sionna_version": "2.0.1",
+    "snr_dbs": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      14,
+      16,
+      18,
+      20
+    ],
+    "speeds_mps": [
+      0.0,
+      10.0,
+      30.0
+    ],
+    "sweep_mode": "full",
+    "target_coded_bits": 10000000,
+    "torch_version": "2.13.0+cu130"
+  },
+  "schema_version": 2,
+  "training_performed": false
+}
