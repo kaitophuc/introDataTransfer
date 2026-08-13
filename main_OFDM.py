@@ -25,7 +25,7 @@ training_seed = 0
 evaluation_seeds = [1000, 1001, 1002]
 
 config.seed = training_seed
-should_train_model = True
+should_train_model = False
 checkpoint_path = "checkpoints/full_grid_receiver.pt"
 
 def build_comb_scattered_pilot_pattern(num_ofdm_symbols, num_subcarriers, num_tx, num_streams_per_tx, device):
@@ -245,8 +245,8 @@ def main():
         "num_streams_per_tx": 2,
         "num_rx_ant": 2,
         "num_tx_ant": 2,
-        #"snr_dbs": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
-        "snr_dbs": [16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0]
+        "snr_dbs": [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+        #"snr_dbs": [16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0]
     }
 
     target_coded_bits = sim_config["target_coded_bits"]
@@ -296,7 +296,7 @@ def main():
         trainer.train(
             num_training_steps=10000,
             batch_size=batch_size,
-            training_snr_db_min=6.0,
+            training_snr_db_min=16.0,
             training_snr_db_max=22.0,
             print_every=500,
         )
